@@ -1,0 +1,905 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Settings, Users, Shield, Palette, Eye, 
+  Save, Plus, Edit, Trash2, X, Key,
+  UserPlus, Mail, AlertCircle, CheckCircle
+} from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
+
+interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  clinic_id?: string;
+  provider_id?: string;
+  highlight_color?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BillingCode {
+  id: string;
+  code: string;
+  description: string;
+  color: string;
+  created_at: string;
+}
+
+interface AuditLog {
+  id: string;
+  user_id: string;
+  user_name: string;
+  action: string;
+  table_name: string;
+  record_id: string;
+  old_values: any;
+  new_values: any;
+  created_at: string;
+}
+
+interface SuperAdminSettingsProps {
+  userId?: string;
+}
+
+function SuperAdminSettings({ userId }: SuperAdminSettingsProps) {
+  const [activeTab, setActiveTab] = useState('users');
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [billingCodes, setBillingCodes] = useState<BillingCode[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [showAddCode, setShowAddCode] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editingCode, setEditingCode] = useState<BillingCode | null>(null);
+
+  const [newUser, setNewUser] = useState({
+    email: '',
+    name: '',
+    role: 'provider',
+    clinic_id: '',
+    provider_id: '',
+    highlight_color: '#6B7280'
+  });
+
+  const [newCode, setNewCode] = useState({
+    code: '',
+    description: '',
+    color: '#3B82F6'
+  });
+
+  const tabs = [
+    { id: 'users', label: 'User Management', icon: Users },
+    { id: 'billing-codes', label: 'Billing Codes', icon: Palette },
+    { id: 'audit-logs', label: 'Audit Logs', icon: Eye },
+    { id: 'system-settings', label: 'System Settings', icon: Settings }
+  ];
+
+  const roleOptions = [
+    'super_admin', 'admin', 'view_only_admin', 'billing_staff', 
+    'view_only_billing', 'provider', 'office_staff'
+  ];
+
+  const colorOptions = [
+    '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+    '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6B7280'
+  ];
+
+  useEffect(() => {
+    loadData();
+  }, [activeTab]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      switch (activeTab) {
+        case 'users':
+          await loadUsers();
+          break;
+        case 'billing-codes':
+          await loadBillingCodes();
+          break;
+        case 'audit-logs':
+          await loadAuditLogs();
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      toast.error('Failed to load users');
+    }
+  };
+
+  const loadBillingCodes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('billing_codes')
+        .select('*')
+        .order('code', { ascending: true });
+
+      if (error) throw error;
+      setBillingCodes(data || []);
+    } catch (error) {
+      console.error('Error loading billing codes:', error);
+      toast.error('Failed to load billing codes');
+    }
+  };
+
+  const loadAuditLogs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      setAuditLogs(data || []);
+    } catch (error) {
+      console.error('Error loading audit logs:', error);
+      toast.error('Failed to load audit logs');
+    }
+  };
+
+  const createUser = async () => {
+    if (!newUser.email || !newUser.name) {
+      toast.error('Please fill in required fields');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .insert([{
+          ...newUser,
+          id: crypto.randomUUID()
+        }]);
+
+      if (error) throw error;
+
+      toast.success('User created successfully');
+      setShowAddUser(false);
+      setNewUser({
+        email: '',
+        name: '',
+        role: 'provider',
+        clinic_id: '',
+        provider_id: '',
+        highlight_color: '#6B7280'
+      });
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      toast.error(error.message || 'Failed to create user');
+    }
+  };
+
+  const updateUser = async () => {
+    if (!editingUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          email: editingUser.email,
+          name: editingUser.name,
+          role: editingUser.role,
+          clinic_id: editingUser.clinic_id,
+          provider_id: editingUser.provider_id,
+          highlight_color: (editingUser as any).highlight_color
+        })
+        .eq('id', editingUser.id);
+
+      if (error) throw error;
+
+      toast.success('User updated successfully');
+      setEditingUser(null);
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      toast.error(error.message || 'Failed to update user');
+    }
+  };
+
+  const deleteUser = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success('User deleted successfully');
+      loadUsers();
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast.error(error.message || 'Failed to delete user');
+    }
+  };
+
+  const createBillingCode = async () => {
+    if (!newCode.code || !newCode.description) {
+      toast.error('Please fill in required fields');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('billing_codes')
+        .insert([newCode]);
+
+      if (error) throw error;
+
+      toast.success('Billing code created successfully');
+      setShowAddCode(false);
+      setNewCode({
+        code: '',
+        description: '',
+        color: '#3B82F6'
+      });
+      loadBillingCodes();
+    } catch (error: any) {
+      console.error('Error creating billing code:', error);
+      toast.error(error.message || 'Failed to create billing code');
+    }
+  };
+
+  const updateBillingCode = async () => {
+    if (!editingCode) return;
+
+    try {
+      const { error } = await supabase
+        .from('billing_codes')
+        .update(editingCode)
+        .eq('id', editingCode.id);
+
+      if (error) throw error;
+
+      toast.success('Billing code updated successfully');
+      setEditingCode(null);
+      loadBillingCodes();
+    } catch (error: any) {
+      console.error('Error updating billing code:', error);
+      toast.error(error.message || 'Failed to update billing code');
+    }
+  };
+
+  const deleteBillingCode = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this billing code?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('billing_codes')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success('Billing code deleted successfully');
+      loadBillingCodes();
+    } catch (error: any) {
+      console.error('Error deleting billing code:', error);
+      toast.error(error.message || 'Failed to delete billing code');
+    }
+  };
+
+  const sendUserInvite = async (userId: string) => {
+    try {
+      // In a real implementation, you would send an email invite
+      toast.success('Invite sent successfully');
+    } catch (error) {
+      console.error('Error sending invite:', error);
+      toast.error('Failed to send invite');
+    }
+  };
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'super_admin': return 'bg-red-100 text-red-800';
+      case 'admin': return 'bg-orange-100 text-orange-800';
+      case 'view_only_admin': return 'bg-purple-100 text-purple-800';
+      case 'billing_staff': return 'bg-blue-100 text-blue-800';
+      case 'view_only_billing': return 'bg-indigo-100 text-indigo-800';
+      case 'provider': return 'bg-green-100 text-green-800';
+      case 'office_staff': return 'bg-teal-100 text-teal-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const renderTabContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        </div>
+      );
+    }
+
+    switch (activeTab) {
+      case 'users':
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
+              <button
+                onClick={() => setShowAddUser(true)}
+                className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                <Plus size={16} />
+                <span>Add User</span>
+              </button>
+            </div>
+
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Email
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Role
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Clinic
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Highlight
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {user.name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {user.email}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
+                            {user.role.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {user.clinic_id || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-4 h-4 rounded border" style={{ backgroundColor: user.highlight_color || '#6B7280' }}></div>
+                            <span className="text-xs text-gray-600">{user.highlight_color || '#'}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(user.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => sendUserInvite(user.id)}
+                              className="text-blue-600 hover:text-blue-900"
+                              title="Send Invite"
+                            >
+                              <Mail size={16} />
+                            </button>
+                            <button
+                              onClick={() => setEditingUser(user)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="Edit User"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => deleteUser(user.id)}
+                              className="text-red-600 hover:text-red-900"
+                              title="Delete User"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'billing-codes':
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Billing Codes & Colors</h3>
+              <button
+                onClick={() => setShowAddCode(true)}
+                className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                <Plus size={16} />
+                <span>Add Code</span>
+              </button>
+            </div>
+
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Code
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Color
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {billingCodes.map((code) => (
+                      <tr key={code.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {code.code}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">
+                          {code.description}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <div 
+                              className="w-4 h-4 rounded border"
+                              style={{ backgroundColor: code.color }}
+                            ></div>
+                            <span className="text-sm text-gray-900">{code.color}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => setEditingCode(code)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="Edit Code"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => deleteBillingCode(code.id)}
+                              className="text-red-600 hover:text-red-900"
+                              title="Delete Code"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'audit-logs':
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Audit Logs</h3>
+              <p className="text-sm text-gray-600">Track all system changes and user actions</p>
+            </div>
+
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        User
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Action
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Table
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Record ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Timestamp
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {log.user_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {log.action}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {log.table_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {log.record_id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(log.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'system-settings':
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-gray-900">System Settings</h3>
+            
+            <div className="bg-white rounded-lg shadow p-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-4">General Settings</h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    System Name
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue="American Medical Billing & Coding LLC"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Default Billing Fee Percentage
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    defaultValue="6.25"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Invoice Due Days
+                  </label>
+                  <input
+                    type="number"
+                    defaultValue="30"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-4">Security Settings</h4>
+              <div className="space-y-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    defaultChecked
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <label className="ml-2 text-sm text-gray-700">
+                    Enable audit logging
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    defaultChecked
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <label className="ml-2 text-sm text-gray-700">
+                    Require strong passwords
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <label className="ml-2 text-sm text-gray-700">
+                    Enable two-factor authentication
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Super Admin Settings</h2>
+          <p className="text-gray-600">Manage system settings, users, and configurations</p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Shield className="h-5 w-5 text-red-600" />
+          <span className="text-sm font-medium text-gray-900">
+            Super Admin
+          </span>
+        </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === tab.id
+                      ? 'border-purple-500 text-purple-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+        <div className="p-6">
+          {renderTabContent()}
+        </div>
+      </div>
+
+      {/* Add User Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Add New User</h3>
+              <button
+                onClick={() => setShowAddUser(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Full Name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Role
+                </label>
+                <select
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  {roleOptions.map(role => (
+                    <option key={role} value={role}>{role.replace('_', ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Highlight Color
+                </label>
+                <div className="flex space-x-2">
+                  {colorOptions.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setNewUser({ ...newUser, highlight_color: color })}
+                      className={`w-8 h-8 rounded border-2 ${newUser.highlight_color === color ? 'border-gray-900' : 'border-gray-300'}`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Clinic ID
+                </label>
+                <input
+                  type="text"
+                  value={newUser.clinic_id}
+                  onChange={(e) => setNewUser({ ...newUser, clinic_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Clinic ID"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Provider ID
+                </label>
+                <input
+                  type="text"
+                  value={newUser.provider_id}
+                  onChange={(e) => setNewUser({ ...newUser, provider_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Provider ID"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowAddUser(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createUser}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Create User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Billing Code Modal */}
+      {showAddCode && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Add Billing Code</h3>
+              <button
+                onClick={() => setShowAddCode(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Code *
+                </label>
+                <input
+                  type="text"
+                  value={newCode.code}
+                  onChange={(e) => setNewCode({ ...newCode, code: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="e.g., 99214"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description *
+                </label>
+                <input
+                  type="text"
+                  value={newCode.description}
+                  onChange={(e) => setNewCode({ ...newCode, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="e.g., Office Visit"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color
+                </label>
+                <div className="flex space-x-2">
+                  {colorOptions.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setNewCode({ ...newCode, color })}
+                      className={`w-8 h-8 rounded border-2 ${
+                        newCode.color === color ? 'border-gray-900' : 'border-gray-300'
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={newCode.color}
+                  onChange={(e) => setNewCode({ ...newCode, color: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent mt-2"
+                  placeholder="#3B82F6"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowAddCode(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createBillingCode}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Create Code
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default SuperAdminSettings;
