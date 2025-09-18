@@ -677,8 +677,8 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Super Admin Settings</h2>
-          <p className="text-gray-600">Manage system settings, users, and configurations</p>
+          <h2 className="text-2xl font-bold text-gray-900">{tabs.find(t => t.id === activeTab)?.label || 'Settings'}</h2>
+          <p className="text-gray-600">Manage {tabs.find(t => t.id === activeTab)?.label?.toLowerCase()}</p>
         </div>
         <div className="flex items-center space-x-2">
           <Shield className="h-5 w-5 text-red-600" />
