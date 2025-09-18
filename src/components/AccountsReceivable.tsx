@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   DollarSign, Plus, Edit, Save, X, Search, Filter, 
   Lock, Unlock, AlertCircle, CheckCircle, Calendar,
@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import DataGrid from './DataGrid';
+import { ColDef, GridOptions } from 'ag-grid-community';
 
 interface AccountsReceivableEntry {
   id: string;
@@ -312,6 +314,49 @@ function AccountsReceivable({
   const totalArAmount = arEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const totalProviderPay = providerPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
+  const arColumns: ColDef[] = useMemo(() => ([
+    { field: 'patient_id', headerName: 'Patient ID', editable: canEdit && !isLocked },
+    { field: 'date', headerName: 'Date', editable: canEdit && !isLocked },
+    { field: 'amount', headerName: 'Amount', editable: canEdit && !isLocked, valueParser: (p: any) => parseFloat(p.newValue) || 0 },
+    { field: 'type', headerName: 'Type', editable: canEdit && !isLocked },
+    { field: 'description', headerName: 'Description', editable: canEdit && !isLocked },
+    { field: 'amount_owed', headerName: 'Amount Owed', editable: canEdit && !isLocked, valueParser: (p: any) => parseFloat(p.newValue) || 0 },
+    { field: 'notes', headerName: 'Notes', editable: canEdit && !isLocked }
+  ]), [canEdit, isLocked]);
+
+  const paymentsColumns: ColDef[] = useMemo(() => ([
+    { field: 'description', headerName: 'Description', editable: canEdit && !isLocked },
+    { field: 'amount', headerName: 'Amount', editable: canEdit && !isLocked, valueParser: (p: any) => parseFloat(p.newValue) || 0 },
+    { field: 'notes', headerName: 'Notes', editable: canEdit && !isLocked }
+  ]), [canEdit, isLocked]);
+
+  const onArCellChanged: GridOptions['onCellValueChanged'] = async (e) => {
+    if (!e.data || !e.colDef.field) return;
+    try {
+      const field = String(e.colDef.field);
+      const { id, ...rest } = e.data as any;
+      const value = e.newValue;
+      await supabase.from('accounts_receivable').update({ [field]: value }).eq('id', id);
+      // Refresh totals in header
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update entry');
+    }
+  };
+
+  const onPaymentCellChanged: GridOptions['onCellValueChanged'] = async (e) => {
+    if (!e.data || !e.colDef.field) return;
+    try {
+      const field = String(e.colDef.field);
+      const { id, ...rest } = e.data as any;
+      const value = e.newValue;
+      await supabase.from('provider_payments').update({ [field]: value }).eq('id', id);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update payment');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -398,28 +443,7 @@ function AccountsReceivable({
         </div>
       </div>
 
-      {/* Column Lock Controls */}
-      {canLock && (
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Column Locking</h3>
-          <div className="flex flex-wrap gap-2">
-            {lockableColumns.map(column => (
-              <button
-                key={column}
-                onClick={() => toggleColumnLock(column)}
-                className={`flex items-center space-x-1 px-3 py-1 rounded text-sm ${
-                  lockedColumns.includes(column)
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-white text-gray-900 border border-gray-300'
-                }`}
-              >
-                {lockedColumns.includes(column) ? <Lock size={14} /> : <Unlock size={14} />}
-                <span>Column {column}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+  
 
       {/* Filters */}
       <div className="flex space-x-4">
@@ -438,7 +462,7 @@ function AccountsReceivable({
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
         >
           <option value="all">All Types</option>
           {typeOptions.map(type => (
@@ -447,98 +471,23 @@ function AccountsReceivable({
         </select>
       </div>
 
-      {/* AR Entries Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* AR Entries Grid */}
+      <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Accounts Receivable Entries</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Patient ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount Owed
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Notes
-                </th>
-                {canEdit && !isLocked && (
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredEntries.map((entry) => (
-                <tr key={entry.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {entry.patient_id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(entry.date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${entry.amount.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(entry.type)}`}>
-                      {entry.type}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {entry.description}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${entry.amount_owed.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {entry.notes}
-                  </td>
-                  {canEdit && !isLocked && (
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => setEditingEntry(entry)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit Entry"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => deleteEntry(entry.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete Entry"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="px-4 py-4">
+          <DataGrid
+            columnDefs={arColumns}
+            rowData={filteredEntries}
+            readOnly={!canEdit || isLocked}
+            onCellValueChanged={onArCellChanged}
+          />
         </div>
       </div>
 
-      {/* Provider Payments Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Provider Payments Grid */}
+      <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-lg font-semibold text-gray-900">Provider Payments</h3>
           {canEdit && !isLocked && (
@@ -551,62 +500,13 @@ function AccountsReceivable({
             </button>
           )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Notes
-                </th>
-                {canEdit && !isLocked && (
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {providerPayments.map((payment) => (
-                <tr key={payment.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {payment.description}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${payment.amount.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {payment.notes}
-                  </td>
-                  {canEdit && !isLocked && (
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => setEditingPayment(payment)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit Payment"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => deletePayment(payment.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete Payment"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="px-4 py-4">
+          <DataGrid
+            columnDefs={paymentsColumns}
+            rowData={providerPayments}
+            readOnly={!canEdit || isLocked}
+            onCellValueChanged={onPaymentCellChanged}
+          />
         </div>
       </div>
 

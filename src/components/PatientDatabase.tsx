@@ -353,7 +353,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Add New Patient</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Add New Patient</h3>
               <button
                 onClick={() => setShowAddPatient(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -370,7 +370,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                   type="text"
                   value={newPatient.patient_id}
                   onChange={(e) => setNewPatient({ ...newPatient, patient_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                   placeholder="e.g., 3151"
                 />
               </div>
@@ -383,7 +383,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                     type="text"
                     value={newPatient.first_name}
                     onChange={(e) => setNewPatient({ ...newPatient, first_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="John"
                   />
                 </div>
@@ -395,7 +395,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                     type="text"
                     value={newPatient.last_name}
                     onChange={(e) => setNewPatient({ ...newPatient, last_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="Doe"
                   />
                 </div>
@@ -407,7 +407,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                 <select
                   value={newPatient.insurance}
                   onChange={(e) => setNewPatient({ ...newPatient, insurance: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                 >
                   <option value="">Select Insurance</option>
                   {insuranceOptions.map(insurance => (
@@ -425,7 +425,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                     step="0.01"
                     value={newPatient.copay}
                     onChange={(e) => setNewPatient({ ...newPatient, copay: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="25.00"
                   />
                 </div>
@@ -438,7 +438,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                     step="0.01"
                     value={newPatient.coinsurance}
                     onChange={(e) => setNewPatient({ ...newPatient, coinsurance: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="10.00"
                   />
                 </div>
@@ -467,7 +467,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Edit Patient</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Edit Patient</h3>
               <button
                 onClick={() => setEditingPatient(null)}
                 className="text-gray-400 hover:text-gray-600"

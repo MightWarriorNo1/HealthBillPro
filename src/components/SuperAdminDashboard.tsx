@@ -54,9 +54,9 @@ function SuperAdminDashboard() {
       case 'users':
         return <UserManagement currentUserId={user?.id} />;
       case 'billing-codes':
-        return <SuperAdminSettings userId={user?.id} />;
+        return <SuperAdminSettings userId={user?.id} initialTab="billing-codes" />;
       case 'audit-logs':
-        return <SuperAdminSettings userId={user?.id} />;
+        return <SuperAdminSettings userId={user?.id} initialTab="audit-logs" />;
       case 'billing':
         return (
           <div className="space-y-6">

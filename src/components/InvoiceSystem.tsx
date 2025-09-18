@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, Download, Plus, Edit, Trash2, 
   DollarSign, Calendar, Building2, Save, X,
@@ -7,6 +7,8 @@ import {
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
+import DataGrid from './DataGrid';
+import { ColDef, GridOptions } from 'ag-grid-community';
 
 interface Invoice {
   id: string;
@@ -334,6 +336,38 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
     return matchesSearch && matchesStatus;
   });
 
+  const columns: ColDef[] = useMemo(() => ([
+    { field: 'invoice_number', headerName: 'Invoice #' },
+    { field: 'clinic_name', headerName: 'Clinic' },
+    { field: 'billing_period', headerName: 'Billing Period' },
+    { field: 'total_insurance_payments', headerName: 'Insurance Payments' },
+    { field: 'billing_fee_amount', headerName: 'Billing Fee' },
+    { field: 'balance_due', headerName: 'Balance Due' },
+    { field: 'status', headerName: 'Status' },
+    { field: 'due_date', headerName: 'Due Date' }
+  ]), []);
+
+  const onCellChanged: GridOptions['onCellValueChanged'] = async (e) => {
+    if (!e.data || !e.colDef.field) return;
+    try {
+      const updated = { ...(e.data as any) } as Invoice;
+      // Recalculate derived amounts if inputs changed
+      if (['total_insurance_payments', 'billing_fee_percentage', 'total_copays_coinsurance'].includes(String(e.colDef.field))) {
+        const billing_fee_amount = (updated.total_insurance_payments * updated.billing_fee_percentage) / 100;
+        const net_insurance_payments = updated.total_insurance_payments - updated.total_copays_coinsurance;
+        const balance_due = billing_fee_amount;
+        updated.billing_fee_amount = billing_fee_amount;
+        updated.net_insurance_payments = net_insurance_payments;
+        updated.balance_due = balance_due;
+      }
+      const { id, ...rest } = updated as any;
+      await supabase.from('invoices').update(rest).eq('id', updated.id);
+      await loadInvoices();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update invoice');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -376,7 +410,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
         >
           <option value="all">All Status</option>
           <option value="draft">Draft</option>
@@ -386,109 +420,51 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
         </select>
       </div>
 
-      {/* Invoices Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Invoice #
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Clinic
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Billing Period
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Insurance Payments
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Billing Fee
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Balance Due
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Due Date
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredInvoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {invoice.invoice_number}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {invoice.clinic_name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {invoice.billing_period}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${invoice.total_insurance_payments.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${invoice.billing_fee_amount.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ${invoice.balance_due.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(invoice.status)}`}>
-                      {invoice.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {new Date(invoice.due_date).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        onClick={() => {
-                          setSelectedInvoice(invoice);
-                          loadInvoiceItems(invoice.id);
-                        }}
-                        className="text-indigo-600 hover:text-indigo-900"
-                        title="View Invoice"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        onClick={() => setEditingInvoice(invoice)}
-                        className="text-yellow-600 hover:text-yellow-900"
-                        title="Edit Invoice"
-                      >
-                        <Edit size={16} />
-                      </button>
-                      <button
-                        onClick={() => exportInvoiceToPDF(invoice)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Export PDF"
-                      >
-                        <Download size={16} />
-                      </button>
-                      <button
-                        onClick={() => deleteInvoice(invoice.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete Invoice"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Invoices Grid */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-4 py-4">
+          <DataGrid
+            columnDefs={columns}
+            rowData={filteredInvoices}
+            readOnly={false}
+            onCellValueChanged={onCellChanged}
+          />
+          {/* Actions row remains outside grid; users can still use buttons in row selection later if needed */}
+          <div className="mt-3 text-sm text-gray-600">Use grid to edit values. Use actions from the list below:</div>
+          <div className="mt-2 space-y-1">
+            {filteredInvoices.map((invoice) => (
+              <div key={invoice.id} className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setSelectedInvoice(invoice); loadInvoiceItems(invoice.id); }}
+                  className="text-indigo-600 hover:text-indigo-900"
+                  title="View Invoice"
+                >
+                  View #{invoice.invoice_number}
+                </button>
+                <button
+                  onClick={() => setEditingInvoice(invoice)}
+                  className="text-yellow-600 hover:text-yellow-900"
+                  title="Edit Invoice"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => exportInvoiceToPDF(invoice)}
+                  className="text-red-600 hover:text-red-900"
+                  title="Export PDF"
+                >
+                  Export PDF
+                </button>
+                <button
+                  onClick={() => deleteInvoice(invoice.id)}
+                  className="text-red-600 hover:text-red-900"
+                  title="Delete Invoice"
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -614,7 +590,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Create New Invoice</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Create New Invoice</h3>
               <button
                 onClick={() => setShowAddInvoice(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -632,7 +608,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                     type="text"
                     value={newInvoice.clinic_name}
                     onChange={(e) => setNewInvoice({ ...newInvoice, clinic_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="Clinic Name"
                   />
                 </div>
@@ -644,7 +620,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                     type="text"
                     value={newInvoice.billing_period}
                     onChange={(e) => setNewInvoice({ ...newInvoice, billing_period: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="e.g., September 2024"
                   />
                 </div>
@@ -658,7 +634,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                     type="date"
                     value={newInvoice.date}
                     onChange={(e) => setNewInvoice({ ...newInvoice, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                   />
                 </div>
                 <div>
@@ -669,7 +645,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                     type="date"
                     value={newInvoice.due_date}
                     onChange={(e) => setNewInvoice({ ...newInvoice, due_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                   />
                 </div>
               </div>
@@ -683,7 +659,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                     step="0.01"
                     value={newInvoice.total_insurance_payments}
                     onChange={(e) => setNewInvoice({ ...newInvoice, total_insurance_payments: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="0.00"
                   />
                 </div>
@@ -696,7 +672,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                     step="0.01"
                     value={newInvoice.billing_fee_percentage}
                     onChange={(e) => setNewInvoice({ ...newInvoice, billing_fee_percentage: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="6.25"
                   />
                 </div>
@@ -710,7 +686,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                   step="0.01"
                   value={newInvoice.total_copays_coinsurance}
                   onChange={(e) => setNewInvoice({ ...newInvoice, total_copays_coinsurance: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                   placeholder="0.00"
                 />
               </div>
@@ -721,7 +697,7 @@ function InvoiceSystem({ userRole, clinicId }: InvoiceSystemProps) {
                 <textarea
                   value={newInvoice.notes}
                   onChange={(e) => setNewInvoice({ ...newInvoice, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                   rows={3}
                   placeholder="Additional notes..."
                 />

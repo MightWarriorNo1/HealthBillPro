@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Clock, Play, Pause, Calendar, DollarSign, 
   LogIn, LogOut, History, User, CheckCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import DataGrid from './DataGrid';
+import { ColDef, GridOptions } from 'ag-grid-community';
 
 interface TimecardEntry {
   id: string;
@@ -308,6 +310,40 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
   const totalPay = timecards.reduce((sum, entry) => sum + entry.total_pay, 0);
   const unpaidTotal = timecards.filter(e => !e.paid).reduce((sum, e) => sum + e.total_pay, 0);
 
+  const columns: ColDef[] = useMemo(() => ([
+    { field: 'clock_in', headerName: 'Clock In', editable: canEdit },
+    { field: 'clock_out', headerName: 'Clock Out', editable: canEdit },
+    { field: 'total_hours', headerName: 'Duration (h)', editable: false },
+    { field: 'hourly_rate', headerName: 'Hourly Rate', editable: canEdit, valueParser: (p: any) => parseFloat(p.newValue) || 0 },
+    { field: 'total_pay', headerName: 'Total Pay', editable: false },
+    { field: 'notes', headerName: 'Notes', editable: canEdit },
+    { field: 'paid', headerName: 'Paid', editable: false }
+  ]), [canEdit]);
+
+  const onCellChanged: GridOptions['onCellValueChanged'] = async (e) => {
+    if (!e.data || !e.colDef.field) return;
+    try {
+      const updated = { ...(e.data as any) };
+      // Recompute totals if time or rate changed
+      if (['clock_in', 'clock_out', 'hourly_rate'].includes(String(e.colDef.field))) {
+        const clockInTime = new Date(updated.clock_in);
+        const clockOutTime = updated.clock_out ? new Date(updated.clock_out) : null;
+        if (clockInTime && clockOutTime && !isNaN(clockInTime.getTime()) && !isNaN(clockOutTime.getTime())) {
+          const totalMs = clockOutTime.getTime() - clockInTime.getTime();
+          const totalHours = totalMs / (1000 * 60 * 60);
+          const totalPay = totalHours * Number(updated.hourly_rate || 0);
+          updated.total_hours = totalHours;
+          updated.total_pay = totalPay;
+        }
+      }
+      const { id, ...rest } = updated;
+      await supabase.from('timecard_entries').update(rest).eq('id', updated.id);
+      await loadTimecards();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update timecard');
+    }
+  };
+
   const markPeriodAsPaid = async () => {
     try {
       const { startISO, endISO } =
@@ -455,7 +491,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
         <select
           value={viewMode}
           onChange={(e) => setViewMode(e.target.value as 'day' | 'week')}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
         >
           <option value="day">Day</option>
           <option value="week">Week</option>
@@ -467,7 +503,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
               type="date"
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
             />
           </>
         ) : (
@@ -477,7 +513,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
               type="date"
               value={weekStart}
               onChange={(e) => setWeekStart(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
             />
             <div className="ml-4 text-sm text-gray-600">
               {(() => { const { startISO, endISO } = getWeekRange(weekStart); return `Range: ${startISO} to ${endISO}`; })()}
@@ -495,87 +531,15 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
         </div>
       </div>
 
-      {/* Timecard Entries Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Clock In
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Clock Out
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Duration
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Hourly Rate
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total Pay
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Notes
-                </th>
-                {canEdit && (
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {timecards.map((entry) => (
-                <tr key={entry.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {formatTime(entry.clock_in)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {entry.clock_out ? formatTime(entry.clock_out) : 'Active'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {formatDuration(entry.total_hours)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${entry.hourly_rate.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    ${entry.total_pay.toFixed(2)}
-                    {entry.paid ? (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Paid</span>
-                    ) : (
-                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Unpaid</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {entry.notes || '-'}
-                  </td>
-                  {canEdit && (
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => setEditingEntry(entry)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit Entry"
-                        >
-                          <Calendar size={16} />
-                        </button>
-                        <button
-                          onClick={() => deleteEntry(entry.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete Entry"
-                        >
-                          <History size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Timecard Entries Grid */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="px-4 py-4">
+          <DataGrid
+            columnDefs={columns}
+            rowData={timecards}
+            readOnly={!canEdit}
+            onCellValueChanged={onCellChanged}
+          />
         </div>
       </div>
 

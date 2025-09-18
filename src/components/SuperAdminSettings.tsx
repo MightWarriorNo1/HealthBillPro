@@ -41,10 +41,11 @@ interface AuditLog {
 
 interface SuperAdminSettingsProps {
   userId?: string;
+  initialTab?: 'users' | 'billing-codes' | 'audit-logs' | 'system-settings';
 }
 
-function SuperAdminSettings({ userId }: SuperAdminSettingsProps) {
-  const [activeTab, setActiveTab] = useState('users');
+function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
+  const [activeTab, setActiveTab] = useState(initialTab || 'users');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [billingCodes, setBillingCodes] = useState<BillingCode[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -89,6 +90,13 @@ function SuperAdminSettings({ userId }: SuperAdminSettingsProps) {
   useEffect(() => {
     loadData();
   }, [activeTab]);
+
+  // Keep internal tab in sync with provided initialTab (when parent changes)
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   const loadData = async () => {
     try {

@@ -26,25 +26,31 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const USER_STORAGE_KEY = 'app_user';
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Check for existing session on mount and subscribe to auth state once
   React.useEffect(() => {
+    // Fast path: if we see a persisted Supabase token and a stored user, hydrate immediately
+    try {
+      const hasSupabaseToken = Object.keys(localStorage).some(key => key.endsWith('auth-token') && key.includes('sb-'));
+      const storedUserRaw = localStorage.getItem(USER_STORAGE_KEY);
+      if (hasSupabaseToken && storedUserRaw) {
+        const storedUser: User = JSON.parse(storedUserRaw);
+        setUser(storedUser);
+        setIsAuthenticated(true);
+        setLoading(false);
+      }
+    } catch (_) {}
+
     const checkSession = async () => {
       try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Only proceed if email is confirmed
-        if (session.user.email_confirmed_at) {
-          await loadUserProfile(session.user);
-        } else {
-          console.log('Session exists but email not confirmed, not authenticating');
-          setUser(null);
-          setIsAuthenticated(false);
-          setLoading(false);
-        }
+        // Trust existing session on page refresh; load profile without email confirmation gate
+        await loadUserProfile(session.user);
       } else {
         setLoading(false);
       }
@@ -69,17 +75,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Auth state changed:', event, session?.user?.email);
       
       if (event === 'SIGNED_IN' && session?.user) {
-        // Only proceed if email is confirmed
-        if (session.user.email_confirmed_at) {
-          setLoading(true);
-          await loadUserProfile(session.user);
-        } else {
-          console.log('User signed in but email not confirmed, not authenticating');
-          setUser(null);
-          setIsAuthenticated(false);
-          setLoading(false);
-        }
+        // For interactive sign-in, proceed regardless; login() still enforces confirmation
+        setLoading(true);
+        await loadUserProfile(session.user);
       } else if (event === 'SIGNED_OUT') {
+        try { localStorage.removeItem(USER_STORAGE_KEY); } catch (_) {}
         setUser(null);
         setIsAuthenticated(false);
         setLoading(false);
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe();
   }, []);
 
   const loadUserProfile = async (supabaseUser: SupabaseUser) => {
@@ -149,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         setUser(user);
         setIsAuthenticated(true);
+        try { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user)); } catch (_) {}
         setLoading(false);
       } else {
         // No profile found, set loading to false
@@ -322,6 +323,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       await supabase.auth.signOut();
+      try { localStorage.removeItem(USER_STORAGE_KEY); } catch (_) {}
       setUser(null);
       setIsAuthenticated(false);
     } catch (error) {
@@ -418,7 +420,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  if (loading) {
+  if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">

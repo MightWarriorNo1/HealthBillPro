@@ -1,13 +1,10 @@
-import { LucideIcon } from 'lucide-react';
-
-interface Tab {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-}
+import { LucideIcon, ChevronRight } from 'lucide-react';
+import React from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 
 interface SidebarProps {
-  tabs: Tab[];
+  tabs: Array<{ id: string; label: string; icon: LucideIcon }>;
   activeTab: string;
   onTabChange: (tabId: string) => void;
   isOpen?: boolean;
@@ -15,6 +12,12 @@ interface SidebarProps {
 }
 
 function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: SidebarProps) {
+  const { user } = useAuth();
+  const { clinics, providers } = useData();
+  const userClinic = clinics.find(c => c.id === user?.clinicId);
+  const clinicProviders = providers.filter(p => p.clinicId === user?.clinicId);
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
   return (
     <>
       {/* Mobile overlay */}
@@ -31,27 +34,64 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
         w-64 bg-white shadow-sm border-r border-gray-200 h-screen
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        lg:top-16
+        lg:top-24
       `}>
         <nav className="p-4 space-y-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  onTabChange(tab.id);
-                  if (onClose) onClose(); // Close mobile menu after selection
-                }}
-                className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg text-left font-medium text-sm transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <Icon className="h-5 w-5 flex-shrink-0" />
-                <span className="truncate">{tab.label}</span>
-              </button>
+              <div key={tab.id} className="space-y-1">
+                <button
+                  onClick={() => {
+                    onTabChange(tab.id);
+                    if (onClose) onClose();
+                  }}
+                  className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg text-left font-medium text-sm transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  <span className="truncate">{tab.label}</span>
+                </button>
+
+                {/* Hierarchy: Clinic > Providers > Months */}
+                {tab.id === 'schedules' && userClinic && (
+                  <div className="ml-6 text-sm text-gray-700">
+                    <div className="font-semibold mb-1">{userClinic.name}</div>
+                    <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
+                      {clinicProviders.map((p) => (
+                        <details key={p.id} className="group">
+                          <summary className="flex items-center cursor-pointer select-none text-gray-600 hover:text-gray-900">
+                            <ChevronRight className="h-4 w-4 mr-1 group-open:rotate-90 transition-transform" />
+                            {p.name}
+                          </summary>
+                          <ul className="ml-5 mt-1 space-y-1">
+                            {months.map((m, idx) => (
+                              <li
+                                key={idx}
+                                className="text-gray-500 hover:text-gray-900 cursor-pointer"
+                                onClick={() => {
+                                  const year = new Date().getFullYear();
+                                  window.dispatchEvent(
+                                    new CustomEvent('billing:select-month', {
+                                      detail: { month: idx + 1, year }
+                                    })
+                                  );
+                                  if (onClose) onClose();
+                                }}
+                              >
+                                {m}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

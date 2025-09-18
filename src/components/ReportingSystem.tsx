@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  FileText, Download, Calendar, BarChart3, 
-  Users, Building2, DollarSign, Clock, 
-  Filter, Search, Eye, Printer
+  FileText, Download,
+  Users, Building2, DollarSign, Clock
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import DataGrid from './DataGrid';
+import { ColDef } from 'ag-grid-community';
 
 interface ReportData {
   provider?: string;
@@ -40,7 +41,7 @@ interface ReportingSystemProps {
   providerId?: string;
 }
 
-function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProps) {
+function ReportingSystem({ clinicId }: ReportingSystemProps) {
   const [reports, setReports] = useState<ReportData[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState<string>('provider');
@@ -49,7 +50,7 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
   const [selectedQuarter, setSelectedQuarter] = useState(Math.ceil((new Date().getMonth() + 1) / 3));
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [filterClinic, setFilterClinic] = useState<string>('all');
-  const [filterProvider, setFilterProvider] = useState<string>('all');
+  const [filterProvider] = useState<string>('all');
   const [monthClosed, setMonthClosed] = useState<boolean>(false);
 
   const reportTypes = [
@@ -275,15 +276,15 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
         break;
       case 'patient':
         try {
+          // Attempt to use patient payment fields if they exist
           const { data, error } = await supabase
             .from('billing_entries')
-            .select('clinic_id, provider_id, payment_amount, payment_status')
+            .select('clinic_id, payment_amount, payment_status')
             .gte('date', startDate)
             .lte('date', endDate);
           if (error) throw error;
-          // Aggregate outstanding patient invoices (payment_status not Paid)
           const byClinic: Record<string, { count: number; amount: number; ccDeclined: number; payPlan: number }> = {};
-          (data || []).forEach(r => {
+          (data as any[] | null || []).forEach((r: any) => {
             const key = r.clinic_id || 'unknown';
             const status = (r.payment_status || '').toString();
             const isOutstanding = status !== 'Paid' && status !== '';
@@ -327,9 +328,64 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
           if (rows.length === 0) {
             rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, laborHours: 0, laborPay: 0, invoiceAmount: 0 });
           }
-        } catch (e) {
-          console.error('Patient invoices report failed', e);
-          toast.error('Failed to load patient invoices');
+        } catch (e: any) {
+          // Fallback if columns don't exist: derive patient invoices from invoices table
+          if (e?.code === '42703') {
+            try {
+              const { data: inv, error: invErr } = await supabase
+                .from('invoices')
+                .select('clinic_id, balance_due, status')
+                .gte('date', startDate)
+                .lte('date', endDate);
+              if (invErr) throw invErr;
+              const byClinic: Record<string, { count: number; amount: number }> = {};
+              (inv || []).forEach(r => {
+                const key = r.clinic_id || 'unknown';
+                const isOutstanding = (r.status || '').toString().toLowerCase() !== 'paid';
+                if (!byClinic[key]) byClinic[key] = { count: 0, amount: 0 };
+                if (isOutstanding) {
+                  byClinic[key].count += 1;
+                  byClinic[key].amount += Number(r.balance_due || 0);
+                }
+              });
+              let idToClinic: Record<string, string> = {};
+              const clinicIds = Object.keys(byClinic);
+              if (clinicIds.length > 0) {
+                const { data: clinicRows } = await supabase
+                  .from('clinics')
+                  .select('id, name')
+                  .in('id', clinicIds);
+                (clinicRows || []).forEach(c => { idToClinic[c.id] = c.name; });
+              }
+              clinicIds.forEach(cid => {
+                const agg = byClinic[cid];
+                rows.push({
+                  clinic: idToClinic[cid] || cid,
+                  month: months[selectedMonth - 1],
+                  quarter: quarters[selectedQuarter - 1],
+                  year: selectedYear,
+                  insurancePayments: 0,
+                  patientPayments: 0,
+                  accountsReceivable: 0,
+                  totalAmount: 0,
+                  outstandingClaims: 0,
+                  patientInvoices: agg.count,
+                  laborHours: 0,
+                  laborPay: 0,
+                  invoiceAmount: agg.amount
+                });
+              });
+              if (rows.length === 0) {
+                rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, laborHours: 0, laborPay: 0, invoiceAmount: 0 });
+              }
+            } catch (fallbackErr) {
+              console.error('Patient invoices fallback failed', fallbackErr);
+              toast.error('Failed to load patient invoices');
+            }
+          } else {
+            console.error('Patient invoices report failed', e);
+            toast.error('Failed to load patient invoices');
+          }
         }
         break;
       case 'labor':
@@ -534,6 +590,20 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
       );
     }
 
+    const columns: ColDef[] = [
+      ...(selectedReport === 'provider' ? [{ field: 'provider', headerName: 'Provider' } as ColDef] : []),
+      ...(selectedReport === 'clinic' ? [{ field: 'clinic', headerName: 'Clinic' } as ColDef] : []),
+      { field: 'insurancePayments', headerName: 'Insurance Payments' },
+      { field: 'patientPayments', headerName: 'Patient Payments' },
+      { field: 'accountsReceivable', headerName: 'A/R' },
+      { field: 'totalAmount', headerName: 'Total' },
+      { field: 'outstandingClaims', headerName: 'Outstanding Claims' },
+      { field: 'patientInvoices', headerName: 'Patient Invoices' },
+      { field: 'laborHours', headerName: 'Labor Hours' },
+      { field: 'laborPay', headerName: 'Labor Pay' },
+      { field: 'invoiceAmount', headerName: 'Invoice Amount' }
+    ];
+
     return (
       <div className="space-y-6">
         {/* Summary Cards */}
@@ -595,95 +665,10 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
           </div>
         </div>
 
-        {/* Report Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  {selectedReport === 'provider' && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Provider
-                    </th>
-                  )}
-                  {selectedReport === 'clinic' && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Clinic
-                    </th>
-                  )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Insurance Payments
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Patient Payments
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    A/R
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Outstanding Claims
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Patient Invoices
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Labor Hours
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Labor Pay
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Invoice Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {reports.map((report, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    {selectedReport === 'provider' && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {report.provider}
-                      </td>
-                    )}
-                    {selectedReport === 'clinic' && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {report.clinic}
-                      </td>
-                    )}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${report.insurancePayments.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${report.patientPayments.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${report.accountsReceivable.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ${report.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {report.outstandingClaims}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {report.patientInvoices}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {report.laborHours}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${report.laborPay.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${report.invoiceAmount.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Report Grid */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-4 py-4">
+            <DataGrid columnDefs={columns} rowData={reports as any[]} readOnly={true} />
           </div>
         </div>
       </div>
@@ -695,21 +680,7 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
       {/* Header */}
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-3">
-          <button
-            onClick={() => {
-              const params = new URLSearchParams();
-              const effectiveClinic = filterClinic !== 'all' ? filterClinic : (clinicId || '');
-              if (effectiveClinic) params.set('clinicId', effectiveClinic);
-              const mm = selectedMonth.toString().padStart(2, '0');
-              params.set('month', `${selectedYear}-${mm}`);
-              params.set('tab', 'accounts');
-              window.location.href = `/?${params.toString()}`;
-            }}
-            className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-            title="Back to Accounts Receivable"
-          >
-            Back to AR
-          </button>
+          
           <h2 className="text-2xl font-bold text-gray-900">Reporting System</h2>
           <p className="text-gray-600">Generate and export comprehensive reports</p>
         </div>
@@ -762,7 +733,7 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
             >
               <option value="month">Monthly</option>
               <option value="quarter">Quarterly</option>
@@ -778,7 +749,7 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
               >
                 {months.map((month, index) => (
                   <option key={index} value={index + 1}>{month}</option>
@@ -795,7 +766,7 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
               <select
                 value={selectedQuarter}
                 onChange={(e) => setSelectedQuarter(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
               >
                 {quarters.map((quarter, index) => (
                   <option key={index} value={index + 1}>{quarter}</option>
@@ -811,7 +782,7 @@ function ReportingSystem({ userRole, clinicId, providerId }: ReportingSystemProp
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
             >
               {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
                 <option key={year} value={year}>{year}</option>

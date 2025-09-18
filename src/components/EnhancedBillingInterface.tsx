@@ -7,6 +7,7 @@ import {
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import BillingInterface from './BillingInterface';
+import BillingGrid from './BillingGrid';
 import PatientDatabase from './PatientDatabase';
 import TodoSystem from './TodoSystem';
 
@@ -36,6 +37,17 @@ function EnhancedBillingInterface({
   ];
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
+  // Listen for sidebar month selections
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e?.detail?.month) {
+        setSelectedMonth(e.detail.month);
+        setSelectedYear(e.detail.year || new Date().getFullYear());
+      }
+    };
+    window.addEventListener('billing:select-month', handler as EventListener);
+    return () => window.removeEventListener('billing:select-month', handler as EventListener);
+  }, []);
 
   const getMonthColor = (monthIndex: number) => {
     const colors = [
@@ -69,10 +81,10 @@ function EnhancedBillingInterface({
           </button>
         </div>
       </div>
-      <BillingInterface
+      <BillingGrid
         providerId={providerId}
         clinicId={clinicId}
-        canEdit={canEdit}
+        readOnly={!canEdit}
         visibleColumns={visibleColumns}
         dateRange={computeSelectedMonthDateRange(selectedYear, selectedMonth)}
       />
@@ -118,7 +130,7 @@ function EnhancedBillingInterface({
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
               >
                 {months.map((month, index) => (
                   <option key={index} value={index + 1}>{month}</option>
@@ -127,7 +139,7 @@ function EnhancedBillingInterface({
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
               >
                 {years.map(year => (
                   <option key={year} value={year}>{year}</option>
@@ -201,10 +213,10 @@ function EnhancedBillingInterface({
               <h3 className="text-lg font-semibold text-gray-900">Billing Overview</h3>
             </div>
             <div className="p-6 h-96 overflow-y-auto">
-              <BillingInterface
+              <BillingGrid
                 providerId={providerId}
                 clinicId={clinicId}
-                canEdit={false}
+                readOnly={true}
                 visibleColumns={visibleColumns}
                 dateRange={computeSelectedMonthDateRange(selectedYear, selectedMonth)}
               />
