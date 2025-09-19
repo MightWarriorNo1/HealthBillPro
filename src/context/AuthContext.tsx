@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -26,37 +26,53 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const USER_STORAGE_KEY = 'app_user';
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const isLoadingProfile = useRef(false);
+  const hasInitialized = useRef(false);
 
   // Check for existing session on mount and subscribe to auth state once
   React.useEffect(() => {
-    // Fast path: if we see a persisted Supabase token and a stored user, hydrate immediately
-    try {
-      const hasSupabaseToken = Object.keys(localStorage).some(key => key.endsWith('auth-token') && key.includes('sb-'));
-      const storedUserRaw = localStorage.getItem(USER_STORAGE_KEY);
-      if (hasSupabaseToken && storedUserRaw) {
-        const storedUser: User = JSON.parse(storedUserRaw);
-        setUser(storedUser);
-        setIsAuthenticated(true);
-        setLoading(false);
-      }
-    } catch (_) {}
-
     const checkSession = async () => {
       try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        // Trust existing session on page refresh; load profile without email confirmation gate
-        await loadUserProfile(session.user);
-      } else {
-        setLoading(false);
-      }
+        console.log('Checking existing session on mount...');
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Session check result:', session ? 'Session found' : 'No session', session?.user?.email);
+        
+        if (session?.user) {
+          // Only proceed if email is confirmed
+          if (session.user.email_confirmed_at) {
+            console.log('Session exists and email confirmed, loading profile...');
+            if (!isLoadingProfile.current) {
+              isLoadingProfile.current = true;
+              try {
+                await loadUserProfile(session.user);
+              } catch (error) {
+                console.error('Error loading profile during session check:', error);
+                setLoading(false);
+                isLoadingProfile.current = false;
+              }
+            } else {
+              console.log('Profile already loading during session check, skipping');
+              setLoading(false);
+            }
+          } else {
+            console.log('Session exists but email not confirmed, not authenticating');
+            setUser(null);
+            setIsAuthenticated(false);
+            setLoading(false);
+          }
+        } else {
+          console.log('No existing session found');
+          setUser(null);
+          setIsAuthenticated(false);
+          setLoading(false);
+        }
       } catch (error) {
         console.error('Error checking session:', error);
         setLoading(false);
+        isLoadingProfile.current = false;
       }
     };
 
@@ -64,28 +80,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const timeoutId = setTimeout(() => {
       console.warn('Session check timeout - setting loading to false');
       setLoading(false);
+      isLoadingProfile.current = false;
     }, 10000); // 10 second timeout
 
     checkSession().finally(() => {
       clearTimeout(timeoutId);
+      hasInitialized.current = true;
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.email);
+      console.log('Auth state changed:', event, session?.user?.email, 'Email confirmed:', session?.user?.email_confirmed_at);
       
       if (event === 'SIGNED_IN' && session?.user) {
-        // For interactive sign-in, proceed regardless; login() still enforces confirmation
-        setLoading(true);
-        await loadUserProfile(session.user);
+        // Only proceed if email is confirmed
+        if (session.user.email_confirmed_at) {
+          if (!isLoadingProfile.current) {
+            console.log('Starting profile load for signed in user');
+            isLoadingProfile.current = true;
+            setLoading(true);
+            await loadUserProfile(session.user);
+          } else {
+            console.log('Profile already loading, skipping');
+          }
+        } else {
+          console.log('User signed in but email not confirmed, not authenticating');
+          setUser(null);
+          setIsAuthenticated(false);
+          setLoading(false);
+        }
       } else if (event === 'SIGNED_OUT') {
-        try { localStorage.removeItem(USER_STORAGE_KEY); } catch (_) {}
+        console.log('User signed out');
         setUser(null);
         setIsAuthenticated(false);
         setLoading(false);
+        isLoadingProfile.current = false;
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         // Token was refreshed, ensure user profile is still loaded
-        if (!user) {
+        if (!user && !isLoadingProfile.current) {
+          console.log('Token refreshed, loading profile');
+          isLoadingProfile.current = true;
           setLoading(true);
           await loadUserProfile(session.user);
         }
@@ -96,16 +130,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription?.unsubscribe();
+    return () => {
+      subscription?.unsubscribe();
+      // Reset the refs when component unmounts
+      isLoadingProfile.current = false;
+      hasInitialized.current = false;
+    };
   }, []);
 
   const loadUserProfile = async (supabaseUser: SupabaseUser) => {
+    let profileTimeout: NodeJS.Timeout | undefined;
+    
     try {
+      console.log('Loading user profile for:', supabaseUser.email);
+      
+      // Add timeout to prevent infinite loading
+      profileTimeout = setTimeout(() => {
+        console.warn('Profile loading timeout - setting loading to false');
+        setLoading(false);
+        isLoadingProfile.current = false;
+      }, 15000); // 15 second timeout
+      
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('id', supabaseUser.id)
         .maybeSingle();
+        
+      clearTimeout(profileTimeout);
 
       if (error) {
         console.error('Error loading user profile:', error);
@@ -126,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
             setUser(tempUser);
             setIsAuthenticated(true);
+            console.log('Temp user created successfully:', tempUser.email, tempUser.role);
           } else {
             // Email not confirmed, don't authenticate
             console.log('Email not confirmed, user must verify email first');
@@ -135,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         setLoading(false);
+        isLoadingProfile.current = false;
         return;
       }
 
@@ -149,16 +203,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         setUser(user);
         setIsAuthenticated(true);
-        try { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user)); } catch (_) {}
         setLoading(false);
+        isLoadingProfile.current = false;
+        console.log('User profile loaded successfully:', user.email, user.role);
       } else {
         // No profile found, set loading to false
         setLoading(false);
+        isLoadingProfile.current = false;
+        console.log('No profile found for user');
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
       // Always set loading to false on error to prevent infinite loading
       setLoading(false);
+      isLoadingProfile.current = false;
+    } finally {
+      // Clear timeout in finally block to ensure it's always cleared
+      if (profileTimeout) {
+        clearTimeout(profileTimeout);
+      }
     }
   };
 
@@ -205,9 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: 'Please check your email and click the confirmation link to activate your account.' };
         }
         
-        // loadUserProfile will handle setting loading to false
-        setLoading(true);
-        await loadUserProfile(data.user);
+        // The onAuthStateChange handler will handle loading state and profile loading
         return { success: true };
       }
 
@@ -323,9 +384,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       await supabase.auth.signOut();
-      try { localStorage.removeItem(USER_STORAGE_KEY); } catch (_) {}
       setUser(null);
       setIsAuthenticated(false);
+      isLoadingProfile.current = false;
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -409,7 +470,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data.session?.user) {
-        await loadUserProfile(data.session.user);
+        if (!isLoadingProfile.current) {
+          isLoadingProfile.current = true;
+          await loadUserProfile(data.session.user);
+        }
         return { success: true };
       }
 
@@ -420,7 +484,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  if (loading && !isAuthenticated) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">

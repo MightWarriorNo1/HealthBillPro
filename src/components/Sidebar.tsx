@@ -31,7 +31,7 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
       {/* Sidebar */}
       <div className={`
         fixed lg:fixed inset-y-0 left-0 z-40 lg:z-auto
-        w-64 bg-white shadow-sm border-r border-gray-200 h-screen
+        w-64 bg-white shadow-sm border-r border-gray-200
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         lg:top-24

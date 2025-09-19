@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import LandingPage from './components/LandingPage';
 import LoginScreen from './components/LoginScreen';
@@ -16,19 +16,8 @@ import { DataProvider } from './context/DataContext';
 
 function AppRoutes() {
   const { user, isAuthenticated, loading } = useAuth();
-  const navigate = useNavigate();
   const [showLanding, setShowLanding] = useState(true);
   const [authScreen, setAuthScreen] = useState<'login' | 'signup' | 'reset'>('login');
-
-  // On hard refresh, once auth is resolved, send user to role dashboard at '/'
-  useEffect(() => {
-    if (loading) return;
-    if (!isAuthenticated) return;
-    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    if (nav && nav.type === 'reload') {
-      navigate('/', { replace: true });
-    }
-  }, [loading, isAuthenticated, navigate]);
 
   // Show loading spinner while checking authentication
   if (loading) {

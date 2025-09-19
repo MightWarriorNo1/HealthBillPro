@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
+import { dataService } from '../services/dataService';
 
 export interface Clinic {
   id: string;
@@ -70,22 +70,84 @@ export interface Invoice {
   }>;
 }
 
+export interface Patient {
+  id: string;
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  insurance: string;
+  copay: number;
+  coinsurance: number;
+  clinicId: string;
+}
+
+export interface TodoItem {
+  id: string;
+  claimId: string;
+  status: 'waiting' | 'in_progress' | 'ip' | 'completed' | 'on_hold';
+  issue: string;
+  notes?: string;
+  fluNotes?: string;
+  clinicId: string;
+  createdBy: string;
+  completedAt?: string;
+}
+
+export interface AccountsReceivable {
+  id: string;
+  patientId: string;
+  date: string;
+  amount: number;
+  type: 'Insurance' | 'Patient' | 'Clinic';
+  notes?: string;
+  description?: string;
+  amountOwed: number;
+  clinicId: string;
+}
+
 interface DataContextType {
   clinics: Clinic[];
   providers: Provider[];
+  patients: Patient[];
   billingEntries: BillingEntry[];
-  claimIssues: ClaimIssue[];
+  todoItems: TodoItem[];
+  accountsReceivable: AccountsReceivable[];
   timecardEntries: TimecardEntry[];
   invoices: Invoice[];
-  addBillingEntry: (entry: Omit<BillingEntry, 'id'>) => void;
-  updateBillingEntry: (id: string, entry: Partial<BillingEntry>) => void;
-  addClaimIssue: (issue: Omit<ClaimIssue, 'id'>) => void;
-  updateClaimIssue: (id: string, issue: Partial<ClaimIssue>) => void;
-  addTimecardEntry: (entry: Omit<TimecardEntry, 'id'>) => void;
-  addInvoice: (invoice: Omit<Invoice, 'id'>) => void;
-  updateInvoice: (id: string, invoice: Partial<Invoice>) => void;
-  addClinic: (clinic: Omit<Clinic, 'id'>) => void;
-  addProvider: (provider: Omit<Provider, 'id'>) => void;
+  claimIssues: ClaimIssue[];
+  loading: boolean;
+  error: string | null;
+  
+  // Patients
+  addPatient: (patient: Omit<Patient, 'id'>) => Promise<void>;
+  updatePatient: (id: string, patient: Partial<Patient>) => Promise<void>;
+  deletePatient: (id: string) => Promise<void>;
+  
+  // Billing entries
+  addBillingEntry: (entry: Omit<BillingEntry, 'id'>) => Promise<void>;
+  updateBillingEntry: (id: string, entry: Partial<BillingEntry>) => Promise<void>;
+  deleteBillingEntry: (id: string) => Promise<void>;
+  
+  // Todo items
+  addTodoItem: (item: Omit<TodoItem, 'id'>) => Promise<void>;
+  updateTodoItem: (id: string, item: Partial<TodoItem>) => Promise<void>;
+  deleteTodoItem: (id: string) => Promise<void>;
+  
+  // Accounts receivable
+  addAccountsReceivable: (ar: Omit<AccountsReceivable, 'id'>) => Promise<void>;
+  updateAccountsReceivable: (id: string, ar: Partial<AccountsReceivable>) => Promise<void>;
+  deleteAccountsReceivable: (id: string) => Promise<void>;
+  
+  // Timecard entries
+  addTimecardEntry: (entry: Omit<TimecardEntry, 'id'>) => Promise<void>;
+  updateTimecardEntry: (id: string, entry: Partial<TimecardEntry>) => Promise<void>;
+  deleteTimecardEntry: (id: string) => Promise<void>;
+  
+  // Refresh data
+  refreshData: () => Promise<void>;
+  refreshBillingEntries: (clinicId?: string, providerId?: string, month?: string) => Promise<void>;
+  refreshTodoItems: (clinicId?: string) => Promise<void>;
+  refreshAccountsReceivable: (clinicId?: string, month?: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -94,62 +156,77 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export function DataProvider({ children }: { children: ReactNode }) {
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [billingEntries, setBillingEntries] = useState<BillingEntry[]>([]);
-  const [claimIssues, setClaimIssues] = useState<ClaimIssue[]>([]);
+  const [todoItems, setTodoItems] = useState<TodoItem[]>([]);
+  const [accountsReceivable, setAccountsReceivable] = useState<AccountsReceivable[]>([]);
   const [timecardEntries, setTimecardEntries] = useState<TimecardEntry[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [claimIssues, setClaimIssues] = useState<ClaimIssue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load data from Supabase
-  React.useEffect(() => {
+  // Load data from database
+  useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
     try {
-      // Load clinics
-      const { data: clinicsData } = await supabase
-        .from('clinics')
-        .select('*')
-        .order('name');
-      
-      console.log("DATA, clinics", clinicsData);
-      
-      if (clinicsData) {
-        const mappedClinics = clinicsData.map(clinic => ({
+      setLoading(true);
+      setError(null);
+
+      const [
+        clinicsData,
+        providersData,
+        patientsData,
+        billingData,
+        todoData,
+        arData,
+        timecardData,
+        invoicesData,
+        issuesData
+      ] = await Promise.all([
+        dataService.getClinics(),
+        dataService.getProviders(),
+        dataService.getPatients(),
+        dataService.getBillingEntries(),
+        dataService.getTodoItems(),
+        dataService.getAccountsReceivable(),
+        dataService.getTimecardEntries(),
+        dataService.getInvoices(),
+        dataService.getClaimIssues()
+      ]);
+
+      // Map database data to context interfaces
+      setClinics(clinicsData.map(clinic => ({
           id: clinic.id,
           name: clinic.name,
           address: clinic.address,
           phone: clinic.phone,
           active: clinic.active
-        }));
-        setClinics(mappedClinics);
-      }
+      })));
 
-      // Load providers
-      const { data: providersData } = await supabase
-        .from('providers')
-        .select('*')
-        .order('name');
-      
-      if (providersData) {
-        const mappedProviders = providersData.map(provider => ({
+      setProviders(providersData.map(provider => ({
           id: provider.id,
           name: provider.name,
           email: provider.email,
           clinicId: provider.clinic_id,
           active: provider.active
-        }));
-        setProviders(mappedProviders);
-      }
+      })));
 
-      // Load billing entries
-      const { data: billingData } = await supabase
-        .from('billing_entries')
-        .select('*')
-        .order('date', { ascending: false });
-      
-      if (billingData) {
-        const mappedBilling = billingData.map(entry => ({
+      setPatients(patientsData.map(patient => ({
+        id: patient.id,
+        patientId: patient.patient_id,
+        firstName: patient.first_name,
+        lastName: patient.last_name,
+        insurance: patient.insurance,
+        copay: patient.copay,
+        coinsurance: patient.coinsurance,
+        clinicId: patient.clinic_id
+      })));
+
+      setBillingEntries(billingData.map(entry => ({
           id: entry.id,
           providerId: entry.provider_id,
           clinicId: entry.clinic_id,
@@ -158,84 +235,141 @@ export function DataProvider({ children }: { children: ReactNode }) {
           procedureCode: entry.procedure_code,
           description: entry.description,
           amount: entry.amount,
-          status: entry.status as 'pending' | 'approved' | 'paid' | 'rejected',
+        status: entry.status,
           claimNumber: entry.claim_number,
           notes: entry.notes
-        }));
-        setBillingEntries(mappedBilling);
-      }
+      })));
 
-      // Load claim issues
-      const { data: issuesData } = await supabase
-        .from('claim_issues')
-        .select('*')
-        .order('created_date', { ascending: false });
-      
-      if (issuesData) {
-        const mappedIssues = issuesData.map(issue => ({
+      setTodoItems(todoData.map(item => ({
+        id: item.id,
+        claimId: item.claim_id,
+        status: item.status,
+        issue: item.issue,
+        notes: item.notes,
+        fluNotes: item.flu_notes,
+        clinicId: item.clinic_id,
+        createdBy: item.created_by,
+        completedAt: item.completed_at
+      })));
+
+      setAccountsReceivable(arData.map(ar => ({
+        id: ar.id,
+        patientId: ar.patient_id,
+        date: ar.date,
+        amount: ar.amount,
+        type: ar.type,
+        notes: ar.notes,
+        description: ar.description,
+        amountOwed: ar.amount_owed,
+        clinicId: ar.clinic_id
+      })));
+
+      setTimecardEntries(timecardData.map(entry => ({
+        id: entry.id,
+        employeeId: entry.user_id,
+        clinicId: '', // Not directly available in timecard_entries
+        date: entry.date,
+        hoursWorked: entry.total_hours,
+        hourlyRate: entry.hourly_rate,
+        description: entry.notes || ''
+      })));
+
+      setInvoices(invoicesData.map(invoice => ({
+        id: invoice.id,
+        clinicId: invoice.clinic_id,
+        invoiceNumber: invoice.invoice_number,
+        date: invoice.date,
+        dueDate: invoice.due_date,
+        amount: invoice.balance_due,
+        status: invoice.status,
+        items: [] // Would need separate query for invoice items
+      })));
+
+      setClaimIssues(issuesData.map(issue => ({
           id: issue.id,
           clinicId: issue.clinic_id,
           providerId: issue.provider_id,
           claimNumber: issue.claim_number,
           description: issue.description,
-          priority: issue.priority as 'low' | 'medium' | 'high',
-          status: issue.status as 'open' | 'in_progress' | 'resolved',
+        priority: issue.priority,
+        status: issue.status,
           assignedTo: issue.assigned_to,
           dueDate: issue.due_date,
           createdDate: issue.created_date
-        }));
-        setClaimIssues(mappedIssues);
-      }
+      })));
 
-      // Load timecard entries
-      const { data: timecardData } = await supabase
-        .from('timecard_entries')
-        .select('*')
-        .order('date', { ascending: false });
-      
-      if (timecardData) {
-        const mappedTimecard = timecardData.map(entry => ({
-          id: entry.id,
-          employeeId: entry.employee_id,
-          clinicId: entry.clinic_id,
-          date: entry.date,
-          hoursWorked: entry.hours_worked,
-          hourlyRate: entry.hourly_rate,
-          description: entry.description
-        }));
-        setTimecardEntries(mappedTimecard);
-      }
-
-      // Load invoices
-      const { data: invoicesData } = await supabase
-        .from('invoices')
-        .select('*')
-        .order('date', { ascending: false });
-      
-      if (invoicesData) {
-        const mappedInvoices = invoicesData.map(invoice => ({
-          id: invoice.id,
-          clinicId: invoice.clinic_id,
-          invoiceNumber: invoice.invoice_number,
-          date: invoice.date,
-          dueDate: invoice.due_date,
-          amount: invoice.amount,
-          status: invoice.status as 'draft' | 'sent' | 'paid' | 'overdue',
-          items: invoice.items
-        }));
-        setInvoices(mappedInvoices);
-      }
     } catch (error) {
       console.error('Error loading data:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const addBillingEntry = (entry: Omit<BillingEntry, 'id'>) => {
-    const addEntry = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('billing_entries')
-          .insert({
+  // Patients
+  const addPatient = async (patient: Omit<Patient, 'id'>) => {
+    try {
+      const dbPatient = await dataService.createPatient({
+        patient_id: patient.patientId,
+        first_name: patient.firstName,
+        last_name: patient.lastName,
+        insurance: patient.insurance,
+        copay: patient.copay,
+        coinsurance: patient.coinsurance,
+        clinic_id: patient.clinicId
+      });
+
+      const newPatient: Patient = {
+        id: dbPatient.id,
+        patientId: dbPatient.patient_id,
+        firstName: dbPatient.first_name,
+        lastName: dbPatient.last_name,
+        insurance: dbPatient.insurance,
+        copay: dbPatient.copay,
+        coinsurance: dbPatient.coinsurance,
+        clinicId: dbPatient.clinic_id
+      };
+
+      setPatients(prev => [newPatient, ...prev]);
+    } catch (error) {
+      console.error('Error adding patient:', error);
+      throw error;
+    }
+  };
+
+  const updatePatient = async (id: string, patient: Partial<Patient>) => {
+    try {
+      const updateData: any = {};
+      if (patient.patientId) updateData.patient_id = patient.patientId;
+      if (patient.firstName) updateData.first_name = patient.firstName;
+      if (patient.lastName) updateData.last_name = patient.lastName;
+      if (patient.insurance) updateData.insurance = patient.insurance;
+      if (patient.copay !== undefined) updateData.copay = patient.copay;
+      if (patient.coinsurance !== undefined) updateData.coinsurance = patient.coinsurance;
+      if (patient.clinicId) updateData.clinic_id = patient.clinicId;
+
+      await dataService.updatePatient(id, updateData);
+      setPatients(prev => prev.map(p => p.id === id ? { ...p, ...patient } : p));
+    } catch (error) {
+      console.error('Error updating patient:', error);
+      throw error;
+    }
+  };
+
+  const deletePatient = async (id: string) => {
+    try {
+      await dataService.deletePatient(id);
+      setPatients(prev => prev.filter(p => p.id !== id));
+    } catch (error) {
+      console.error('Error deleting patient:', error);
+      throw error;
+    }
+  };
+
+  // Billing entries
+  const addBillingEntry = async (entry: Omit<BillingEntry, 'id'>) => {
+    try {
+      const dbEntry = await dataService.createBillingEntry({
             provider_id: entry.providerId,
             clinic_id: entry.clinicId,
             date: entry.date,
@@ -246,39 +380,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
             status: entry.status,
             claim_number: entry.claimNumber,
             notes: entry.notes
-          })
-          .select();
+      });
 
-        if (error) {
-          console.error('Error adding billing entry:', error);
-          return;
-        }
+      const newEntry: BillingEntry = {
+        id: dbEntry.id,
+        providerId: dbEntry.provider_id,
+        clinicId: dbEntry.clinic_id,
+        date: dbEntry.date,
+        patientName: dbEntry.patient_name,
+        procedureCode: dbEntry.procedure_code,
+        description: dbEntry.description,
+        amount: dbEntry.amount,
+        status: dbEntry.status,
+        claimNumber: dbEntry.claim_number,
+        notes: dbEntry.notes
+      };
 
-        if (data && data.length > 0) {
-          const newEntry = {
-            id: data[0].id,
-            providerId: data[0].provider_id,
-            clinicId: data[0].clinic_id,
-            date: data[0].date,
-            patientName: data[0].patient_name,
-            procedureCode: data[0].procedure_code,
-            description: data[0].description,
-            amount: data[0].amount,
-            status: data[0].status as 'pending' | 'approved' | 'paid' | 'rejected',
-            claimNumber: data[0].claim_number,
-            notes: data[0].notes
-          };
           setBillingEntries(prev => [newEntry, ...prev]);
-        }
       } catch (error) {
         console.error('Error adding billing entry:', error);
+      throw error;
       }
-    };
-    addEntry();
   };
 
-  const updateBillingEntry = (id: string, entry: Partial<BillingEntry>) => {
-    const updateEntry = async () => {
+  const updateBillingEntry = async (id: string, entry: Partial<BillingEntry>) => {
       try {
         const updateData: any = {};
         if (entry.providerId) updateData.provider_id = entry.providerId;
@@ -292,297 +417,274 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (entry.claimNumber !== undefined) updateData.claim_number = entry.claimNumber;
         if (entry.notes !== undefined) updateData.notes = entry.notes;
 
-        const { error } = await supabase
-          .from('billing_entries')
-          .update(updateData)
-          .eq('id', id);
-
-        if (error) {
-          console.error('Error updating billing entry:', error);
-          return;
-        }
-
+      await dataService.updateBillingEntry(id, updateData);
         setBillingEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
       } catch (error) {
         console.error('Error updating billing entry:', error);
-      }
-    };
-    updateEntry();
+      throw error;
+    }
   };
 
-  const addClaimIssue = (issue: Omit<ClaimIssue, 'id'>) => {
-    const addIssue = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('claim_issues')
-          .insert({
-            clinic_id: issue.clinicId,
-            provider_id: issue.providerId,
-            claim_number: issue.claimNumber,
-            description: issue.description,
-            priority: issue.priority,
-            status: issue.status,
-            assigned_to: issue.assignedTo,
-            due_date: issue.dueDate,
-            created_date: issue.createdDate
-          })
-          .select();
+  const deleteBillingEntry = async (id: string) => {
+    try {
+      await dataService.deleteBillingEntry(id);
+      setBillingEntries(prev => prev.filter(e => e.id !== id));
+    } catch (error) {
+      console.error('Error deleting billing entry:', error);
+      throw error;
+    }
+  };
 
-        if (error) {
-          console.error('Error adding claim issue:', error);
-          return;
-        }
+  // Todo items
+  const addTodoItem = async (item: Omit<TodoItem, 'id'>) => {
+    try {
+      const dbItem = await dataService.createTodoItem({
+        claim_id: item.claimId,
+        status: item.status,
+        issue: item.issue,
+        notes: item.notes,
+        flu_notes: item.fluNotes,
+        clinic_id: item.clinicId,
+        created_by: item.createdBy,
+        completed_at: item.completedAt
+      });
 
-        if (data && data.length > 0) {
-          const newIssue = {
-            id: data[0].id,
-            clinicId: data[0].clinic_id,
-            providerId: data[0].provider_id,
-            claimNumber: data[0].claim_number,
-            description: data[0].description,
-            priority: data[0].priority as 'low' | 'medium' | 'high',
-            status: data[0].status as 'open' | 'in_progress' | 'resolved',
-            assignedTo: data[0].assigned_to,
-            dueDate: data[0].due_date,
-            createdDate: data[0].created_date
-          };
-          setClaimIssues(prev => [newIssue, ...prev]);
-        }
+      const newItem: TodoItem = {
+        id: dbItem.id,
+        claimId: dbItem.claim_id,
+        status: dbItem.status,
+        issue: dbItem.issue,
+        notes: dbItem.notes,
+        fluNotes: dbItem.flu_notes,
+        clinicId: dbItem.clinic_id,
+        createdBy: dbItem.created_by,
+        completedAt: dbItem.completed_at
+      };
+
+      setTodoItems(prev => [newItem, ...prev]);
       } catch (error) {
-        console.error('Error adding claim issue:', error);
+      console.error('Error adding todo item:', error);
+      throw error;
       }
-    };
-    addIssue();
   };
 
-  const updateClaimIssue = (id: string, issue: Partial<ClaimIssue>) => {
-    const updateIssue = async () => {
+  const updateTodoItem = async (id: string, item: Partial<TodoItem>) => {
       try {
         const updateData: any = {};
-        if (issue.clinicId) updateData.clinic_id = issue.clinicId;
-        if (issue.providerId) updateData.provider_id = issue.providerId;
-        if (issue.claimNumber) updateData.claim_number = issue.claimNumber;
-        if (issue.description) updateData.description = issue.description;
-        if (issue.priority) updateData.priority = issue.priority;
-        if (issue.status) updateData.status = issue.status;
-        if (issue.assignedTo !== undefined) updateData.assigned_to = issue.assignedTo;
-        if (issue.dueDate) updateData.due_date = issue.dueDate;
+      if (item.claimId) updateData.claim_id = item.claimId;
+      if (item.status) updateData.status = item.status;
+      if (item.issue) updateData.issue = item.issue;
+      if (item.notes !== undefined) updateData.notes = item.notes;
+      if (item.fluNotes !== undefined) updateData.flu_notes = item.fluNotes;
+      if (item.clinicId) updateData.clinic_id = item.clinicId;
+      if (item.createdBy) updateData.created_by = item.createdBy;
+      if (item.completedAt !== undefined) updateData.completed_at = item.completedAt;
 
-        const { error } = await supabase
-          .from('claim_issues')
-          .update(updateData)
-          .eq('id', id);
-
-        if (error) {
-          console.error('Error updating claim issue:', error);
-          return;
-        }
-
-        setClaimIssues(prev => prev.map(i => i.id === id ? { ...i, ...issue } : i));
+      await dataService.updateTodoItem(id, updateData);
+      setTodoItems(prev => prev.map(i => i.id === id ? { ...i, ...item } : i));
       } catch (error) {
-        console.error('Error updating claim issue:', error);
-      }
-    };
-    updateIssue();
+      console.error('Error updating todo item:', error);
+      throw error;
+    }
   };
 
-  const addTimecardEntry = (entry: Omit<TimecardEntry, 'id'>) => {
-    const addEntry = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('timecard_entries')
-          .insert({
-            employee_id: entry.employeeId,
-            clinic_id: entry.clinicId,
-            date: entry.date,
-            hours_worked: entry.hoursWorked,
-            hourly_rate: entry.hourlyRate,
-            description: entry.description
-          })
-          .select();
-
-        if (error) {
-          console.error('Error adding timecard entry:', error);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const newEntry = {
-            id: data[0].id,
-            employeeId: data[0].employee_id,
-            clinicId: data[0].clinic_id,
-            date: data[0].date,
-            hoursWorked: data[0].hours_worked,
-            hourlyRate: data[0].hourly_rate,
-            description: data[0].description
-          };
-          setTimecardEntries(prev => [newEntry, ...prev]);
-        }
-      } catch (error) {
-        console.error('Error adding timecard entry:', error);
-      }
-    };
-    addEntry();
+  const deleteTodoItem = async (id: string) => {
+    try {
+      await dataService.deleteTodoItem(id);
+      setTodoItems(prev => prev.filter(i => i.id !== id));
+    } catch (error) {
+      console.error('Error deleting todo item:', error);
+      throw error;
+    }
   };
 
-  const addInvoice = (invoice: Omit<Invoice, 'id'>) => {
-    const addInv = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('invoices')
-          .insert({
-            clinic_id: invoice.clinicId,
-            invoice_number: invoice.invoiceNumber,
-            date: invoice.date,
-            due_date: invoice.dueDate,
-            amount: invoice.amount,
-            status: invoice.status,
-            items: invoice.items
-          })
-          .select();
-
-        if (error) {
-          console.error('Error adding invoice:', error);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const newInvoice = {
-            id: data[0].id,
-            clinicId: data[0].clinic_id,
-            invoiceNumber: data[0].invoice_number,
-            date: data[0].date,
-            dueDate: data[0].due_date,
-            amount: data[0].amount,
-            status: data[0].status as 'draft' | 'sent' | 'paid' | 'overdue',
-            items: data[0].items
-          };
-          setInvoices(prev => [newInvoice, ...prev]);
-        }
-      } catch (error) {
-        console.error('Error adding invoice:', error);
-      }
-    };
-    addInv();
+  // Accounts receivable
+  const addAccountsReceivable = async (ar: Omit<AccountsReceivable, 'id'>) => {
+    try {
+      // This would need to be implemented in dataService
+      console.log('Add accounts receivable:', ar);
+    } catch (error) {
+      console.error('Error adding accounts receivable:', error);
+      throw error;
+    }
   };
 
-  const updateInvoice = (id: string, invoice: Partial<Invoice>) => {
-    const updateInv = async () => {
+  const updateAccountsReceivable = async (id: string, ar: Partial<AccountsReceivable>) => {
+    try {
+      // This would need to be implemented in dataService
+      console.log('Update accounts receivable:', id, ar);
+      } catch (error) {
+      console.error('Error updating accounts receivable:', error);
+      throw error;
+    }
+  };
+
+  const deleteAccountsReceivable = async (id: string) => {
+    try {
+      // This would need to be implemented in dataService
+      console.log('Delete accounts receivable:', id);
+    } catch (error) {
+      console.error('Error deleting accounts receivable:', error);
+      throw error;
+    }
+  };
+
+  // Timecard entries
+  const addTimecardEntry = async (entry: Omit<TimecardEntry, 'id'>) => {
+    try {
+      const dbEntry = await dataService.createTimecardEntry({
+        user_id: entry.employeeId,
+        clock_in: new Date().toISOString(),
+        clock_out: undefined,
+        break_start: undefined,
+        break_end: undefined,
+        total_hours: entry.hoursWorked,
+        hourly_rate: entry.hourlyRate,
+        total_pay: entry.hoursWorked * entry.hourlyRate,
+        notes: entry.description,
+        date: entry.date
+      });
+
+      const newEntry: TimecardEntry = {
+        id: dbEntry.id,
+        employeeId: dbEntry.user_id,
+        clinicId: entry.clinicId,
+        date: dbEntry.date,
+        hoursWorked: dbEntry.total_hours,
+        hourlyRate: dbEntry.hourly_rate,
+        description: dbEntry.notes || ''
+      };
+
+      setTimecardEntries(prev => [newEntry, ...prev]);
+      } catch (error) {
+      console.error('Error adding timecard entry:', error);
+      throw error;
+      }
+  };
+
+  const updateTimecardEntry = async (id: string, entry: Partial<TimecardEntry>) => {
       try {
         const updateData: any = {};
-        if (invoice.clinicId) updateData.clinic_id = invoice.clinicId;
-        if (invoice.invoiceNumber) updateData.invoice_number = invoice.invoiceNumber;
-        if (invoice.date) updateData.date = invoice.date;
-        if (invoice.dueDate) updateData.due_date = invoice.dueDate;
-        if (invoice.amount !== undefined) updateData.amount = invoice.amount;
-        if (invoice.status) updateData.status = invoice.status;
-        if (invoice.items) updateData.items = invoice.items;
+      if (entry.employeeId) updateData.user_id = entry.employeeId;
+      if (entry.hoursWorked !== undefined) updateData.total_hours = entry.hoursWorked;
+      if (entry.hourlyRate !== undefined) updateData.hourly_rate = entry.hourlyRate;
+      if (entry.description !== undefined) updateData.notes = entry.description;
+      if (entry.date) updateData.date = entry.date;
 
-        const { error } = await supabase
-          .from('invoices')
-          .update(updateData)
-          .eq('id', id);
-
-        if (error) {
-          console.error('Error updating invoice:', error);
-          return;
-        }
-
-        setInvoices(prev => prev.map(i => i.id === id ? { ...i, ...invoice } : i));
+      await dataService.updateTimecardEntry(id, updateData);
+      setTimecardEntries(prev => prev.map(e => e.id === id ? { ...e, ...entry } : e));
       } catch (error) {
-        console.error('Error updating invoice:', error);
-      }
-    };
-    updateInv();
+      console.error('Error updating timecard entry:', error);
+      throw error;
+    }
   };
 
-  const addClinic = (clinic: Omit<Clinic, 'id'>) => {
-    const addClin = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('clinics')
-          .insert({
-            name: clinic.name,
-            address: clinic.address,
-            phone: clinic.phone,
-            active: clinic.active
-          })
-          .select();
-
-        if (error) {
-          console.error('Error adding clinic:', error);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const newClinic = {
-            id: data[0].id,
-            name: data[0].name,
-            address: data[0].address,
-            phone: data[0].phone,
-            active: data[0].active
-          };
-          setClinics(prev => [...prev, newClinic]);
-        }
+  const deleteTimecardEntry = async (id: string) => {
+    try {
+      await dataService.deleteTimecardEntry(id);
+      setTimecardEntries(prev => prev.filter(e => e.id !== id));
       } catch (error) {
-        console.error('Error adding clinic:', error);
-      }
-    };
-    addClin();
+      console.error('Error deleting timecard entry:', error);
+      throw error;
+    }
   };
 
-  const addProvider = (provider: Omit<Provider, 'id'>) => {
-    const addProv = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('providers')
-          .insert({
-            name: provider.name,
-            email: provider.email,
-            clinic_id: provider.clinicId,
-            active: provider.active
-          })
-          .select();
-
-        if (error) {
-          console.error('Error adding provider:', error);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const newProvider = {
-            id: data[0].id,
-            name: data[0].name,
-            email: data[0].email,
-            clinicId: data[0].clinic_id,
-            active: data[0].active
-          };
-          setProviders(prev => [...prev, newProvider]);
-        }
-      } catch (error) {
-        console.error('Error adding provider:', error);
-      }
-    };
-    addProv();
+  // Refresh functions
+  const refreshData = async () => {
+    await loadData();
   };
+
+  const refreshBillingEntries = useCallback(async (clinicId?: string, providerId?: string, month?: string) => {
+    try {
+      const data = await dataService.getBillingEntriesByMonth(clinicId, providerId, month);
+      setBillingEntries(data.map(entry => ({
+        id: entry.id,
+        providerId: entry.provider_id,
+        clinicId: entry.clinic_id,
+        date: entry.date,
+        patientName: entry.patient_name,
+        procedureCode: entry.procedure_code,
+        description: entry.description,
+        amount: entry.amount,
+        status: entry.status,
+        claimNumber: entry.claim_number,
+        notes: entry.notes
+      })));
+    } catch (error) {
+      console.error('Error refreshing billing entries:', error);
+    }
+  }, []);
+
+  const refreshTodoItems = useCallback(async (clinicId?: string) => {
+    try {
+      const data = clinicId ? await dataService.getTodoItemsByClinic(clinicId) : await dataService.getTodoItems();
+      setTodoItems(data.map(item => ({
+        id: item.id,
+        claimId: item.claim_id,
+        status: item.status,
+        issue: item.issue,
+        notes: item.notes,
+        fluNotes: item.flu_notes,
+        clinicId: item.clinic_id,
+        createdBy: item.created_by,
+        completedAt: item.completed_at
+      })));
+      } catch (error) {
+      console.error('Error refreshing todo items:', error);
+    }
+  }, []);
+
+  const refreshAccountsReceivable = useCallback(async (clinicId?: string, month?: string) => {
+    try {
+      const data = await dataService.getAccountsReceivableByMonth(clinicId, month);
+      setAccountsReceivable(data.map(ar => ({
+        id: ar.id,
+        patientId: ar.patient_id,
+        date: ar.date,
+        amount: ar.amount,
+        type: ar.type,
+        notes: ar.notes,
+        description: ar.description,
+        amountOwed: ar.amount_owed,
+        clinicId: ar.clinic_id
+      })));
+    } catch (error) {
+      console.error('Error refreshing accounts receivable:', error);
+    }
+  }, []);
 
   return (
     <DataContext.Provider value={{
       clinics,
       providers,
+      patients,
       billingEntries,
-      claimIssues,
+      todoItems,
+      accountsReceivable,
       timecardEntries,
       invoices,
+      claimIssues,
+      loading,
+      error,
+      addPatient,
+      updatePatient,
+      deletePatient,
       addBillingEntry,
       updateBillingEntry,
-      addClaimIssue,
-      updateClaimIssue,
+      deleteBillingEntry,
+      addTodoItem,
+      updateTodoItem,
+      deleteTodoItem,
+      addAccountsReceivable,
+      updateAccountsReceivable,
+      deleteAccountsReceivable,
       addTimecardEntry,
-      addInvoice,
-      updateInvoice,
-      addClinic,
-      addProvider
+      updateTimecardEntry,
+      deleteTimecardEntry,
+      refreshData,
+      refreshBillingEntries,
+      refreshTodoItems,
+      refreshAccountsReceivable
     }}>
       {children}
     </DataContext.Provider>

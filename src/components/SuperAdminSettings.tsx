@@ -41,7 +41,7 @@ interface AuditLog {
 
 interface SuperAdminSettingsProps {
   userId?: string;
-  initialTab?: 'users' | 'billing-codes' | 'audit-logs' | 'system-settings';
+  initialTab?: 'users' | 'billing-codes' | 'clinic-management' | 'export-data' | 'audit-logs' | 'system-settings';
 }
 
 function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
@@ -73,6 +73,8 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
   const tabs = [
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'billing-codes', label: 'Billing Codes', icon: Palette },
+    { id: 'clinic-management', label: 'Clinic Management', icon: Shield },
+    { id: 'export-data', label: 'Export Data', icon: Settings },
     { id: 'audit-logs', label: 'Audit Logs', icon: Eye },
     { id: 'system-settings', label: 'System Settings', icon: Settings }
   ];
@@ -108,6 +110,12 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
           break;
         case 'billing-codes':
           await loadBillingCodes();
+          break;
+        case 'clinic-management':
+          // No specific data loading needed for clinic management
+          break;
+        case 'export-data':
+          // No specific data loading needed for export data
           break;
         case 'audit-logs':
           await loadAuditLogs();
@@ -661,6 +669,154 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                   <label className="ml-2 text-sm text-gray-700">
                     Enable two-factor authentication
                   </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'clinic-management':
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Clinic Management</h3>
+              <p className="text-sm text-gray-600">Manage clinic information and settings</p>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-4">Clinic Information</h4>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Clinic Name
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue="Main Clinic"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue="123 Medical St, City, State 12345"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Phone
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue="(555) 123-4567"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      defaultValue="info@clinic.com"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'export-data':
+        return (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Export Data</h3>
+              <p className="text-sm text-gray-600">Export system data in various formats</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-4">Billing Data</h4>
+                <p className="text-sm text-gray-600 mb-4">Export billing entries, invoices, and financial data</p>
+                <div className="space-y-2">
+                  <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    Export Billing Entries (CSV)
+                  </button>
+                  <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                    Export Invoices (Excel)
+                  </button>
+                  <button className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    Export Financial Reports (PDF)
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-4">User Data</h4>
+                <p className="text-sm text-gray-600 mb-4">Export user information and activity logs</p>
+                <div className="space-y-2">
+                  <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    Export User List (CSV)
+                  </button>
+                  <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                    Export Audit Logs (CSV)
+                  </button>
+                  <button className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    Export Timecards (Excel)
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-4">System Data</h4>
+                <p className="text-sm text-gray-600 mb-4">Export system configuration and settings</p>
+                <div className="space-y-2">
+                  <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    Export Clinic Data (JSON)
+                  </button>
+                  <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                    Export Provider Data (CSV)
+                  </button>
+                  <button className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    Export All Data (ZIP)
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-4">Custom Export</h4>
+                <p className="text-sm text-gray-600 mb-4">Create custom data exports with filters</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Date Range
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                      <input
+                        type="date"
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                  <button className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    Create Custom Export
+                  </button>
                 </div>
               </div>
             </div>

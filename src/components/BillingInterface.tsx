@@ -455,29 +455,35 @@ function BillingInterface({
       </div>
 
       {/* Filters and Controls */}
-      <div className="flex space-x-4">
-        <div className="flex-1">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search billing entries..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            />
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex-1 w-full sm:w-auto">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search billing entries..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          <div className="w-full sm:w-auto">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status Filter</label>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="all">All Status</option>
+              {statusOptions.map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
           </div>
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        >
-          <option value="all">All Status</option>
-          {statusOptions.map(status => (
-            <option key={status} value={status}>{status}</option>
-          ))}
-        </select>
       </div>
 
       

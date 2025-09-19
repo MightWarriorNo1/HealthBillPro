@@ -1,20 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import type { ColDef, GridOptions } from 'ag-grid-community';
+import DataGrid from './DataGrid';
 import { 
-  Plus, Edit, Trash2, Search, X
+  Plus, Search, X
 } from 'lucide-react';
+import { useData } from '../context/DataContext';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 interface Patient {
   id: string;
-  patient_id: string;
-  first_name: string;
-  last_name: string;
+  patientId: string;
+  firstName: string;
+  lastName: string;
   insurance: string;
   copay: number;
   coinsurance: number;
-  created_at: string;
-  updated_at: string;
+  clinicId: string;
 }
 
 interface PatientDatabaseProps {
@@ -23,8 +25,7 @@ interface PatientDatabaseProps {
 }
 
 function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { patients: contextPatients, loading: contextLoading, addPatient: contextAddPatient, updatePatient: contextUpdatePatient } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddPatient, setShowAddPatient] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
@@ -32,9 +33,9 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
   const [effectiveClinicId, setEffectiveClinicId] = useState<string | undefined>(clinicId);
 
   const [newPatient, setNewPatient] = useState({
-    patient_id: '',
-    first_name: '',
-    last_name: '',
+    patientId: '',
+    firstName: '',
+    lastName: '',
     insurance: '',
     copay: 0,
     coinsurance: 0
@@ -75,36 +76,17 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
         setEffectiveClinicId(undefined);
       }
     };
-    resolveClinic().then(() => loadPatients());
+    resolveClinic();
   }, [clinicId]);
 
-  const loadPatients = async () => {
-    try {
-      setLoading(true);
-      let query = supabase
-        .from('patients')
-        .select('*')
-        .order('patient_id', { ascending: true });
-
-      const scopedClinicId = effectiveClinicId || clinicId;
-      if (scopedClinicId) {
-        query = query.eq('clinic_id', scopedClinicId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setPatients(data || []);
-    } catch (error) {
-      console.error('Error loading patients:', error);
-      toast.error('Failed to load patients');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Filter patients from context based on clinic
+  const patients = contextPatients.filter(patient => {
+    const scopedClinicId = effectiveClinicId || clinicId;
+    return !scopedClinicId || patient.clinicId === scopedClinicId;
+  });
 
   const createPatient = async () => {
-    if (!newPatient.patient_id || !newPatient.first_name || !newPatient.last_name) {
+    if (!newPatient.patientId || !newPatient.firstName || !newPatient.lastName) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -115,26 +97,27 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
         toast.error('Cannot create patient: clinic is not selected for your account.');
         return;
       }
-      const { error } = await supabase
-        .from('patients')
-        .insert([{
-          ...newPatient,
-          clinic_id: clinicForInsert
-        }]);
-
-      if (error) throw error;
+      
+      await contextAddPatient({
+        patientId: newPatient.patientId,
+        firstName: newPatient.firstName,
+        lastName: newPatient.lastName,
+        insurance: newPatient.insurance,
+        copay: newPatient.copay,
+        coinsurance: newPatient.coinsurance,
+        clinicId: clinicForInsert
+      });
 
       toast.success('Patient created successfully');
       setShowAddPatient(false);
       setNewPatient({
-        patient_id: '',
-        first_name: '',
-        last_name: '',
+        patientId: '',
+        firstName: '',
+        lastName: '',
         insurance: '',
         copay: 0,
         coinsurance: 0
       });
-      loadPatients();
     } catch (error: any) {
       console.error('Error creating patient:', error);
       toast.error(error.message || 'Failed to create patient');
@@ -145,55 +128,30 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
     if (!editingPatient) return;
 
     try {
-      const { error } = await supabase
-        .from('patients')
-        .update({
-          patient_id: editingPatient.patient_id,
-          first_name: editingPatient.first_name,
-          last_name: editingPatient.last_name,
-          insurance: editingPatient.insurance,
-          copay: editingPatient.copay,
-          coinsurance: editingPatient.coinsurance
-        })
-        .eq('id', editingPatient.id);
-
-      if (error) throw error;
+      await contextUpdatePatient(editingPatient.id, {
+        patientId: editingPatient.patientId,
+        firstName: editingPatient.firstName,
+        lastName: editingPatient.lastName,
+        insurance: editingPatient.insurance,
+        copay: editingPatient.copay,
+        coinsurance: editingPatient.coinsurance
+      });
 
       toast.success('Patient updated successfully');
       setEditingPatient(null);
-      loadPatients();
     } catch (error: any) {
       console.error('Error updating patient:', error);
       toast.error(error.message || 'Failed to update patient');
     }
   };
 
-  const deletePatient = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this patient?')) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('patients')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      toast.success('Patient deleted successfully');
-      loadPatients();
-    } catch (error: any) {
-      console.error('Error deleting patient:', error);
-      toast.error(error.message || 'Failed to delete patient');
-    }
-  };
+  // Note: row-level delete moved out of the main grid UI for now
 
   const filteredPatients = patients.filter(patient => {
     const matchesSearch = 
-      patient.patient_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.patientId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       patient.insurance.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesInsurance = filterInsurance === 'all' || patient.insurance === filterInsurance;
@@ -201,20 +159,36 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
     return matchesSearch && matchesInsurance;
   });
 
-  const getInsuranceColor = (insurance: string) => {
-    switch (insurance) {
-      case 'BCBS': return 'bg-blue-100 text-blue-800';
-      case 'Cigna': return 'bg-green-100 text-green-800';
-      case 'PacificSource': return 'bg-purple-100 text-purple-800';
-      case 'Moda': return 'bg-orange-100 text-orange-800';
-      case 'Anthem': return 'bg-red-100 text-red-800';
-      case 'Providence': return 'bg-indigo-100 text-indigo-800';
-      case 'PP': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const numberParser = (params: any) => {
+    const v = parseFloat(params.newValue);
+    return Number.isFinite(v) ? v : 0;
+  };
+
+  const columnDefs: ColDef[] = useMemo(() => [
+    { field: 'patientId', headerName: 'Patient ID', editable: !!canEdit },
+    { field: 'firstName', headerName: 'First Name', editable: !!canEdit },
+    { field: 'lastName', headerName: 'Last Name', editable: !!canEdit },
+    { field: 'insurance', headerName: 'Insurance', editable: !!canEdit },
+    { field: 'copay', headerName: 'Copay', editable: !!canEdit, valueParser: numberParser },
+    { field: 'coinsurance', headerName: 'Coinsurance', editable: !!canEdit, valueParser: numberParser }
+  ], [canEdit]);
+
+  const onCellValueChanged: GridOptions['onCellValueChanged'] = async (e) => {
+    if (!e.data || !e.colDef.field) return;
+    const field = String(e.colDef.field);
+    const value = field === 'copay' || field === 'coinsurance' ? Number(e.newValue || 0) : e.newValue;
+    
+    try {
+      await contextUpdatePatient((e.data as any).id, { [field]: value });
+    } catch (err) {
+      console.error('Failed to update patient', err);
+      toast.error('Failed to save change');
     }
   };
 
-  if (loading) {
+  // Note: badge colors not used in grid view; retained logic removed to keep file lean
+
+  if (contextLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
@@ -267,85 +241,14 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
         </select>
       </div>
 
-      {/* Patients Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Patient ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  First Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Last Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Insurance
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Copay
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Coinsurance
-                </th>
-                {canEdit && (
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredPatients.map((patient) => (
-                <tr key={patient.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {patient.patient_id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {patient.first_name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {patient.last_name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getInsuranceColor(patient.insurance)}`}>
-                      {patient.insurance}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ${patient.copay.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {patient.coinsurance.toFixed(2)}%
-                  </td>
-                  {canEdit && (
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => setEditingPatient(patient)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                          title="Edit Patient"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => deletePatient(patient.id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete Patient"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Patients Grid (Excel-like) */}
+      <div className="bg-white rounded-lg shadow overflow-hidden p-4">
+        <DataGrid
+          columnDefs={columnDefs}
+          rowData={filteredPatients}
+          readOnly={!canEdit}
+          onCellValueChanged={onCellValueChanged}
+        />
       </div>
 
       {/* Add Patient Modal */}
@@ -368,8 +271,8 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                 </label>
                 <input
                   type="text"
-                  value={newPatient.patient_id}
-                  onChange={(e) => setNewPatient({ ...newPatient, patient_id: e.target.value })}
+                  value={newPatient.patientId}
+                  onChange={(e) => setNewPatient({ ...newPatient, patientId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                   placeholder="e.g., 3151"
                 />
@@ -381,8 +284,8 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                   </label>
                   <input
                     type="text"
-                    value={newPatient.first_name}
-                    onChange={(e) => setNewPatient({ ...newPatient, first_name: e.target.value })}
+                    value={newPatient.firstName}
+                    onChange={(e) => setNewPatient({ ...newPatient, firstName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="John"
                   />
@@ -393,8 +296,8 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                   </label>
                   <input
                     type="text"
-                    value={newPatient.last_name}
-                    onChange={(e) => setNewPatient({ ...newPatient, last_name: e.target.value })}
+                    value={newPatient.lastName}
+                    onChange={(e) => setNewPatient({ ...newPatient, lastName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
                     placeholder="Doe"
                   />
@@ -482,8 +385,8 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                 </label>
                 <input
                   type="text"
-                  value={editingPatient.patient_id}
-                  onChange={(e) => setEditingPatient({ ...editingPatient, patient_id: e.target.value })}
+                  value={editingPatient.patientId}
+                  onChange={(e) => setEditingPatient({ ...editingPatient, patientId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
@@ -494,8 +397,8 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                   </label>
                   <input
                     type="text"
-                    value={editingPatient.first_name}
-                    onChange={(e) => setEditingPatient({ ...editingPatient, first_name: e.target.value })}
+                    value={editingPatient.firstName}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, firstName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
                 </div>
@@ -505,8 +408,8 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                   </label>
                   <input
                     type="text"
-                    value={editingPatient.last_name}
-                    onChange={(e) => setEditingPatient({ ...editingPatient, last_name: e.target.value })}
+                    value={editingPatient.lastName}
+                    onChange={(e) => setEditingPatient({ ...editingPatient, lastName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
                 </div>
