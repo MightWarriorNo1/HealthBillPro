@@ -4,8 +4,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import BillingDataTable from './BillingDataTable';
-import PatientDatabase from './PatientDatabase';
+import EnhancedBillingInterface from './EnhancedBillingInterface';
 import Header from './Header';
 
 interface MenuItem {
@@ -75,7 +74,6 @@ function ProviderDashboard() {
 
   const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'patient-list', label: 'Patient List', icon: Users },
     {
       id: 'months',
       label: 'Months',
@@ -102,12 +100,26 @@ function ProviderDashboard() {
               setSelectedMonth(selectedMonth === item.id ? null : item.id);
             } else {
               setActiveTab(item.id);
+              // When selecting a month item, dispatch month/year for the billing grid and keep submenu open
               if (item.id.startsWith('month-')) {
-                const month = item.id.replace('month-', '').replace('-', ' ');
-                setSelectedMonth(`month-${month.toLowerCase().replace(' ', '-')}`);
+                const payload = item.id.replace('month-', ''); // e.g., jan-2025
+                const [monAbbr, yearStr] = payload.split('-');
+                const monthMap: Record<string, number> = {
+                  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+                  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
+                };
+                const monthNum = monthMap[monAbbr as keyof typeof monthMap];
+                const yearNum = parseInt(yearStr, 10);
+                if (monthNum && yearNum) {
+                  window.dispatchEvent(new CustomEvent('billing:select-month', { detail: { month: monthNum, year: yearNum } }));
+                }
               }
+              // Keep submenu expanded by not changing selectedMonth here
             }
-            setIsSidebarOpen(false);
+            // Only close sidebar on mobile devices
+            if (window.innerWidth < 1024) {
+              setIsSidebarOpen(false);
+            }
           }}
           className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg text-left font-medium text-sm transition-colors ${
             isActive
@@ -179,47 +191,43 @@ function ProviderDashboard() {
               </div>
             </div>
 
-            {/* Quick Actions */}
+            {/* Quick Actions (limited for providers) */}
             <div className="bg-white rounded-lg shadow p-6">
               <h4 className="font-medium text-gray-900 mb-4">Quick Actions</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <button
-                  onClick={() => setActiveTab('patient-list')}
-                  className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-blue-900">View Patients</p>
-                </button>
-                <button
-                  onClick={() => setActiveTab('month-jan-2025')}
+                  onClick={() => {
+                    const now = new Date();
+                    const monAbbr = now.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+                    const year = now.getFullYear();
+                    const id = `month-${monAbbr}-${year}`;
+                    setActiveTab(id);
+                    const monthMap: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+                    const monthNum = monthMap[monAbbr];
+                    window.dispatchEvent(new CustomEvent('billing:select-month', { detail: { month: monthNum, year } }));
+                  }}
                   className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
                 >
                   <Calendar className="h-8 w-8 text-green-600 mx-auto mb-2" />
                   <p className="text-sm font-medium text-green-900">Current Month</p>
                 </button>
-                <button className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                  <Calendar className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-purple-900">Schedule</p>
-                </button>
-                <button className="p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
-                  <Calendar className="h-8 w-8 text-orange-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-orange-900">Reports</p>
-                </button>
               </div>
             </div>
           </div>
-        );
-      case 'patient-list':
-        return (
-          <PatientDatabase
-            clinicId={user?.clinicId}
-            canEdit={user?.role === 'billing_viewer' ? false : true}
-          />
         );
       default:
         // Handle month-specific tabs
         if (activeTab.startsWith('month-')) {
           const month = activeTab.replace('month-', '').replace('-', ' ');
+          // Ensure data view is synced if user navigated directly (e.g., deep link)
+          const payload = activeTab.replace('month-', '');
+          const [monAbbr, yearStr] = payload.split('-');
+          const monthMap: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+          const monthNum = monthMap[monAbbr as keyof typeof monthMap];
+          const yearNum = parseInt(yearStr || `${new Date().getFullYear()}`, 10);
+          if (monthNum && yearNum) {
+            window.dispatchEvent(new CustomEvent('billing:select-month', { detail: { month: monthNum, year: yearNum } }));
+          }
           
         return (
           <div className="space-y-6">
@@ -233,13 +241,15 @@ function ProviderDashboard() {
                   </p>
               </div>
               <div className="p-6">
-                  <BillingDataTable
+                  <EnhancedBillingInterface
                     clinicId={user?.clinicId}
-                  providerId={user?.providerId}
-                    month={month}
-                    canEdit={user?.role === 'billing_viewer' ? false : true}
-                  userRole={user?.role}
-                />
+                    providerId={user?.providerId}
+                    canEdit={true}
+                    userRole={user?.role}
+                    visibleColumns={[
+                      'A','B','C','D','E','F','G','H','I'
+                    ]}
+                  />
                 </div>
             </div>
           </div>
@@ -266,7 +276,7 @@ function ProviderDashboard() {
           fixed lg:fixed inset-y-0 left-0 z-40 lg:z-auto
           w-64 bg-white shadow-sm border-r border-gray-200 h-screen
           transform transition-transform duration-300 ease-in-out
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:-translate-x-full'}
           lg:top-24
         `}>
 
@@ -285,7 +295,7 @@ function ProviderDashboard() {
         )}
 
         {/* Main Content */}
-        <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-auto lg:ml-64" style={{ marginTop: '80px' }}>
+        <div className={`flex-1 p-3 sm:p-4 lg:p-6 overflow-x-auto transition-all duration-300 ${isSidebarOpen ? 'lg:ml-64' : 'lg:ml-0'}`} style={{ marginTop: '80px' }}>
           <div className="max-w-full">
             {renderTabContent()}
           </div>

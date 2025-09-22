@@ -3,11 +3,12 @@ import {
   ChevronUp, ChevronDown, Filter, Search, 
   Edit3, Save, X, Plus, Trash2, Download, Upload
 } from 'lucide-react';
+import { formatDateMMDDYY, formatDateMMDD, formatDateToMonth, getMonthColor, parseDateInput } from '../utils/dateUtils';
 
 export interface ExcelColumn {
   id: string;
   label: string;
-  type: 'text' | 'number' | 'date' | 'select' | 'currency';
+  type: 'text' | 'number' | 'date' | 'select' | 'currency' | 'date-mmddyy' | 'date-mmd' | 'month';
   width?: number;
   options?: string[];
   editable?: boolean;
@@ -135,7 +136,10 @@ function ExcelTable({
         processedValue = parseFloat(editingValue) || 0;
         break;
       case 'date':
-        processedValue = editingValue;
+      case 'date-mmddyy':
+      case 'date-mmd':
+      case 'month':
+        processedValue = parseDateInput(editingValue);
         break;
       default:
         processedValue = editingValue;
@@ -214,6 +218,81 @@ function ExcelTable({
     window.URL.revokeObjectURL(url);
   }, [columns, filteredAndSortedData, title]);
 
+  const handleBulkImport = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,.txt';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        if (lines.length < 2) {
+          alert('File must contain at least a header row and one data row');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const dataRows = lines.slice(1);
+
+        // Validate headers match our columns
+        const columnIds = columns.map(col => col.id);
+        const missingColumns = columnIds.filter(id => !headers.includes(id));
+        
+        if (missingColumns.length > 0) {
+          alert(`Missing required columns: ${missingColumns.join(', ')}`);
+          return;
+        }
+
+        // Parse and add rows
+        const newRows: ExcelRow[] = dataRows.map((line, index) => {
+          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+          const row: ExcelRow = { id: `bulk-${Date.now()}-${index}` };
+          
+          headers.forEach((header, i) => {
+            const column = columns.find(col => col.id === header);
+            if (column) {
+              let value: any = values[i] || '';
+              
+              // Convert based on column type
+              switch (column.type) {
+                case 'number':
+                case 'currency':
+                  value = parseFloat(value) || 0;
+                  break;
+                case 'date':
+                case 'date-mmddyy':
+                case 'date-mmd':
+                case 'month':
+                  value = parseDateInput(value);
+                  break;
+                default:
+                  value = String(value);
+              }
+              
+              row[header] = value;
+            }
+          });
+          
+          return row;
+        });
+
+        // Add all rows
+        if (onDataChange) {
+          onDataChange([...data, ...newRows]);
+        }
+
+        alert(`Successfully imported ${newRows.length} rows`);
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [columns, data, onDataChange]);
+
   const renderCell = (row: ExcelRow, column: ExcelColumn) => {
     const isEditing = editingCell?.rowId === row.id && editingCell?.columnId === column.id;
     const value = row[column.id];
@@ -236,10 +315,13 @@ function ExcelTable({
           ) : (
             <input
               type={column.type === 'number' || column.type === 'currency' ? 'number' : 
-                    column.type === 'date' ? 'date' : 'text'}
+                    column.type === 'date' || column.type === 'date-mmddyy' || column.type === 'date-mmd' || column.type === 'month' ? 'text' : 'text'}
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
               className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+              placeholder={column.type === 'date-mmddyy' ? 'MM-DD-YY' : 
+                         column.type === 'date-mmd' ? 'MM-DD' : 
+                         column.type === 'month' ? 'Month' : ''}
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCellSave();
@@ -263,13 +345,34 @@ function ExcelTable({
       );
     }
 
-    const displayValue = column.type === 'currency' ? 
-      `$${Number(value).toFixed(2)}` : 
-      value || '';
+    let displayValue = '';
+    
+    switch (column.type) {
+      case 'currency':
+        displayValue = `$${Number(value).toFixed(2)}`;
+        break;
+      case 'date-mmddyy':
+        displayValue = formatDateMMDDYY(value);
+        break;
+      case 'date-mmd':
+        displayValue = formatDateMMDD(value);
+        break;
+      case 'month':
+        displayValue = formatDateToMonth(value);
+        break;
+      default:
+        displayValue = value || '';
+    }
 
     return (
       <div className="flex items-center justify-between group">
-        <span className="text-sm">{displayValue}</span>
+        {column.type === 'month' && displayValue ? (
+          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getMonthColor(displayValue)}`}>
+            {displayValue}
+          </span>
+        ) : (
+          <span className="text-sm">{displayValue}</span>
+        )}
         {canEdit && column.editable !== false && (
           <button
             onClick={() => handleCellEdit(row.id, column.id, value)}
@@ -312,13 +415,22 @@ function ExcelTable({
             {/* Actions */}
             <div className="flex flex-wrap items-center gap-2">
               {canAdd && (
-                <button
-                  onClick={handleAddRow}
-                  className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
-                >
-                  <Plus size={14} />
-                  <span>Add Row</span>
-                </button>
+                <>
+                  <button
+                    onClick={handleAddRow}
+                    className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus size={14} />
+                    <span>Add Row</span>
+                  </button>
+                  <button
+                    onClick={handleBulkImport}
+                    className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors"
+                  >
+                    <Upload size={14} />
+                    <span>Bulk Import</span>
+                  </button>
+                </>
               )}
               
               {canExport && (

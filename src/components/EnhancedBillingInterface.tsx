@@ -10,6 +10,8 @@ import BillingInterface from './BillingInterface';
 import BillingGrid from './BillingGrid';
 import PatientDatabase from './PatientDatabase';
 import TodoSystem from './TodoSystem';
+import AccountsReceivable from './AccountsReceivable';
+import MonthlyAccountsReceivable from './MonthlyAccountsReceivable';
 
 interface EnhancedBillingInterfaceProps {
   providerId?: string;
@@ -29,7 +31,7 @@ function EnhancedBillingInterface({
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [viewMode, setViewMode] = useState<'single' | 'split'>('single');
-  const [activePanel, setActivePanel] = useState<'billing' | 'patients' | 'todo'>('billing');
+  const [activePanel, setActivePanel] = useState<'billing' | 'patients' | 'todo' | 'ar' | 'monthly-ar'>('billing');
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -81,6 +83,25 @@ function EnhancedBillingInterface({
           </button>
         </div>
       </div>
+      {/* Tracker for current month (billing only, not A/R) */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <div className="bg-white p-4 rounded border">
+          <div className="text-sm text-gray-600">Claims Not Paid</div>
+          <div id="billing-tracker-claims" className="text-2xl font-bold">—</div>
+        </div>
+        <div className="bg-white p-4 rounded border">
+          <div className="text-sm text-gray-600">Insurance Collected</div>
+          <div id="billing-tracker-ins" className="text-2xl font-bold">$0</div>
+        </div>
+        <div className="bg-white p-4 rounded border">
+          <div className="text-sm text-gray-600">Patient Payments</div>
+          <div id="billing-tracker-pt" className="text-2xl font-bold">$0</div>
+        </div>
+        <div className="bg-white p-4 rounded border">
+          <div className="text-sm text-gray-600">Total Collected</div>
+          <div id="billing-tracker-total" className="text-2xl font-bold">$0</div>
+        </div>
+      </div>
       <BillingGrid
         providerId={providerId}
         clinicId={clinicId}
@@ -115,47 +136,83 @@ function EnhancedBillingInterface({
     </div>
   );
 
+  const renderAccountsReceivable = () => (
+    <div className="h-full">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">Accounts Receivable</h3>
+        <p className="text-sm text-gray-600">Track payments for previous months (separate from current month billing)</p>
+      </div>
+      <AccountsReceivable
+        clinicId={clinicId}
+        canEdit={canEdit}
+        showMonthlySubcategories={true}
+      />
+    </div>
+  );
+
+  const renderMonthlyAccountsReceivable = () => (
+    <div className="h-full">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-gray-900">Monthly A/R Subcategories</h3>
+        <p className="text-sm text-gray-600">Track payments by service month - payments received in {months[selectedMonth - 1]} for previous months</p>
+      </div>
+      <MonthlyAccountsReceivable
+        clinicId={clinicId}
+        canEdit={canEdit}
+        currentMonth={selectedMonth}
+        currentYear={selectedYear}
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header with Month Dropdown */}
+      {/* Header (calendar removed for provider view) */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-0">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Enhanced Billing Interface</h2>
             <p className="text-gray-600">Comprehensive billing management with split-screen functionality</p>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Calendar className="h-5 w-5 text-gray-400" />
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
-              >
-                {months.map((month, index) => (
-                  <option key={index} value={index + 1}>{month}</option>
-                ))}
-              </select>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
-              >
-                {years.map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
-          </div>
         </div>
-
-        {/* Month tabs removed per design; month selection now via dropdown above */}
       </div>
 
       {/* Main Content Area */}
       {viewMode === 'single' ? (
-        <div className="bg-white rounded-lg shadow">
-          {renderBillingInterface()}
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow">
+            {renderBillingInterface()}
+          </div>
+          {/* A/R Section - Separate from current month billing */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Accounts Receivable</h3>
+              <p className="text-sm text-gray-600">Track payments for previous months (separate from current month billing)</p>
+            </div>
+            <div className="p-6">
+              <AccountsReceivable
+                clinicId={clinicId}
+                canEdit={canEdit}
+                showMonthlySubcategories={true}
+              />
+            </div>
+          </div>
+          
+          {/* Monthly A/R Subcategories - Track by service month */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Monthly A/R Subcategories</h3>
+              <p className="text-sm text-gray-600">Track payments by service month - payments received in {months[selectedMonth - 1]} for previous months</p>
+            </div>
+            <div className="p-6">
+              <MonthlyAccountsReceivable
+                clinicId={clinicId}
+                canEdit={canEdit}
+                currentMonth={selectedMonth}
+                currentYear={selectedYear}
+              />
+            </div>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -186,17 +243,41 @@ function EnhancedBillingInterface({
                   <span>Patients</span>
                 </button>
                 {(userRole === 'billing_staff' || userRole === 'admin' || userRole === 'super_admin') && (
-                  <button
-                    onClick={() => setActivePanel('todo')}
-                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
-                      activePanel === 'todo'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    <AlertCircle size={16} />
-                    <span>To-Do</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setActivePanel('todo')}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                        activePanel === 'todo'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <AlertCircle size={16} />
+                      <span>To-Do</span>
+                    </button>
+                    <button
+                      onClick={() => setActivePanel('ar')}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                        activePanel === 'ar'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <DollarSign size={16} />
+                      <span>A/R</span>
+                    </button>
+                    <button
+                      onClick={() => setActivePanel('monthly-ar')}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                        activePanel === 'monthly-ar'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Calendar size={16} />
+                      <span>Monthly A/R</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -204,6 +285,8 @@ function EnhancedBillingInterface({
               {activePanel === 'billing' && renderBillingInterface()}
               {activePanel === 'patients' && renderPatientDatabase()}
               {activePanel === 'todo' && renderTodoSystem()}
+              {activePanel === 'ar' && renderAccountsReceivable()}
+              {activePanel === 'monthly-ar' && renderMonthlyAccountsReceivable()}
             </div>
           </div>
 

@@ -107,7 +107,7 @@ function OfficeStaffDashboard() {
         />
 
         {/* Main Content */}
-        <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-auto lg:ml-64" style={{ marginTop: '80px' }}>
+        <div className={`flex-1 p-3 sm:p-4 lg:p-6 overflow-x-auto transition-all duration-300 ${isSidebarOpen ? 'lg:ml-64' : 'lg:ml-0'}`} style={{ marginTop: '80px' }}>
           <div className="max-w-full">
             {renderTabContent()}
           </div>

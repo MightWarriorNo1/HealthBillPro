@@ -1,5 +1,4 @@
 import { LucideIcon, ChevronRight } from 'lucide-react';
-import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 
@@ -33,7 +32,7 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
         fixed lg:fixed inset-y-0 left-0 z-40 lg:z-auto
         w-64 bg-white shadow-sm border-r border-gray-200
         transform transition-transform duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:-translate-x-full'}
         lg:top-24
       `}>
         <nav className="p-4 space-y-2">
@@ -44,7 +43,10 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
                 <button
                   onClick={() => {
                     onTabChange(tab.id);
-                    if (onClose) onClose();
+                    // Only close sidebar on mobile devices
+                    if (onClose && window.innerWidth < 1024) {
+                      onClose();
+                    }
                   }}
                   className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg text-left font-medium text-sm transition-colors ${
                     activeTab === tab.id
@@ -79,7 +81,10 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
                                       detail: { month: idx + 1, year }
                                     })
                                   );
-                                  if (onClose) onClose();
+                                  // Only close sidebar on mobile devices
+                                  if (onClose && window.innerWidth < 1024) {
+                                    onClose();
+                                  }
                                 }}
                               >
                                 {m}

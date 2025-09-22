@@ -22,8 +22,6 @@ interface ReportData {
   totalAmount: number;
   outstandingClaims: number;
   patientInvoices: number;
-  laborHours: number;
-  laborPay: number;
   invoiceAmount: number;
   // Optional detailed fields
   claimSent?: number;
@@ -58,7 +56,6 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
     { id: 'clinic', label: 'By Clinic', icon: Building2 },
     { id: 'claim', label: 'By Claim', icon: FileText },
     { id: 'patient', label: 'By Patient Invoices', icon: Users },
-    { id: 'labor', label: 'By Labor', icon: Clock },
     { id: 'invoice', label: 'By Invoices', icon: DollarSign }
   ];
 
@@ -190,14 +187,12 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
                 totalAmount: rec.total,
                 outstandingClaims: rec.claimsOpen,
                 patientInvoices: 0,
-                laborHours: 0,
-                laborPay: 0,
                 invoiceAmount: 0
               });
             });
           }
           if (rows.length === 0) {
-            rows.push({ provider: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, laborHours: 0, laborPay: 0, invoiceAmount: 0 });
+            rows.push({ provider: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, invoiceAmount: 0 });
           }
         } catch (e) {
           console.error('Provider report failed', e);
@@ -242,14 +237,12 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
                 totalAmount: rec.total,
                 outstandingClaims: rec.claimsOpen,
                 patientInvoices: 0,
-                laborHours: 0,
-                laborPay: 0,
                 invoiceAmount: 0
               });
             });
           }
           if (rows.length === 0) {
-            rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, laborHours: 0, laborPay: 0, invoiceAmount: 0 });
+            rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, invoiceAmount: 0 });
           }
         } catch (e) {
           console.error('Clinic report failed', e);
@@ -268,7 +261,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
           const counts: Record<string, number> = {};
           wanted.forEach(w => { counts[w] = 0; });
           (data || []).forEach(r => { const s = r.status || 'N/A'; counts[s] = (counts[s] || 0) + 1; });
-          rows.push({ clinic: 'All', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: (data || []).filter(r => r.status !== 'Paid').length, patientInvoices: 0, laborHours: 0, laborPay: 0, invoiceAmount: 0 });
+          rows.push({ clinic: 'All', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: (data || []).filter(r => r.status !== 'Paid').length, patientInvoices: 0, invoiceAmount: 0 });
         } catch (e) {
           console.error('Claim report failed', e);
           toast.error('Failed to load claim data');
@@ -326,7 +319,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
             });
           });
           if (rows.length === 0) {
-            rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, laborHours: 0, laborPay: 0, invoiceAmount: 0 });
+            rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, invoiceAmount: 0 });
           }
         } catch (e: any) {
           // Fallback if columns don't exist: derive patient invoices from invoices table
@@ -376,7 +369,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
                 });
               });
               if (rows.length === 0) {
-                rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, laborHours: 0, laborPay: 0, invoiceAmount: 0 });
+                rows.push({ clinic: '—', month: months[selectedMonth - 1], quarter: quarters[selectedQuarter - 1], year: selectedYear, insurancePayments: 0, patientPayments: 0, accountsReceivable: 0, totalAmount: 0, outstandingClaims: 0, patientInvoices: 0, invoiceAmount: 0 });
               }
             } catch (fallbackErr) {
               console.error('Patient invoices fallback failed', fallbackErr);
@@ -386,59 +379,6 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
             console.error('Patient invoices report failed', e);
             toast.error('Failed to load patient invoices');
           }
-        }
-        break;
-      case 'labor':
-        try {
-          const { data, error } = await supabase
-            .from('timecard_entries')
-            .select('user_id, total_hours, total_pay')
-            .gte('date', startDate)
-            .lte('date', endDate);
-          if (error) throw error;
-          const byUser: Record<string, { hours: number; pay: number }> = {};
-          (data || []).forEach(r => {
-            if (!byUser[r.user_id]) byUser[r.user_id] = { hours: 0, pay: 0 };
-            byUser[r.user_id].hours += Number(r.total_hours || 0);
-            byUser[r.user_id].pay += Number(r.total_pay || 0);
-          });
-          Object.keys(byUser).forEach(userIdKey => {
-            rows.push({
-              provider: userIdKey,
-              month: months[selectedMonth - 1],
-              quarter: quarters[selectedQuarter - 1],
-              year: selectedYear,
-              insurancePayments: 0,
-              patientPayments: 0,
-              accountsReceivable: 0,
-              totalAmount: 0,
-              outstandingClaims: 0,
-              patientInvoices: 0,
-              laborHours: byUser[userIdKey].hours,
-              laborPay: byUser[userIdKey].pay,
-              invoiceAmount: 0
-            });
-          });
-          if (rows.length === 0) {
-            rows.push({
-              clinic: '—',
-              month: months[selectedMonth - 1],
-              quarter: quarters[selectedQuarter - 1],
-              year: selectedYear,
-              insurancePayments: 0,
-              patientPayments: 0,
-              accountsReceivable: 0,
-              totalAmount: 0,
-              outstandingClaims: 0,
-              patientInvoices: 0,
-              laborHours: 0,
-              laborPay: 0,
-              invoiceAmount: 0
-            });
-          }
-        } catch (e) {
-          console.error('Labor report failed', e);
-          toast.error('Failed to load labor data');
         }
         break;
       case 'invoice':
@@ -532,8 +472,6 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
         row.push(String(report.paymentPlan ?? 0));
       }
       row.push(report.patientInvoices.toString());
-      row.push(report.laborHours.toString());
-      row.push(report.laborPay.toFixed(2));
       row.push(report.invoiceAmount.toFixed(2));
       return row;
     });
@@ -548,7 +486,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
     if (selectedReport === 'patient') {
       headers.push('CC Declined', 'Payment Plan');
     }
-    headers.push('Patient Invoices', 'Labor Hours', 'Labor Pay', 'Invoice Amount');
+    headers.push('Patient Invoices', 'Invoice Amount');
 
     // Add table
     (doc as any).autoTable({
@@ -599,8 +537,6 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
       { field: 'totalAmount', headerName: 'Total' },
       { field: 'outstandingClaims', headerName: 'Outstanding Claims' },
       { field: 'patientInvoices', headerName: 'Patient Invoices' },
-      { field: 'laborHours', headerName: 'Labor Hours' },
-      { field: 'laborPay', headerName: 'Labor Pay' },
       { field: 'invoiceAmount', headerName: 'Invoice Amount' }
     ];
 
@@ -650,19 +586,6 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Clock className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Labor Hours</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {reports.reduce((sum, r) => sum + r.laborHours, 0)}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Report Grid */}

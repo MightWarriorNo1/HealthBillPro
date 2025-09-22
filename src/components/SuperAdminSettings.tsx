@@ -61,7 +61,9 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
     role: 'provider',
     clinic_id: '',
     provider_id: '',
-    highlight_color: '#6B7280'
+    highlight_color: '#6B7280',
+    hourly_rate: 0,
+    timecard_option: false
   });
 
   const [newCode, setNewCode] = useState({
@@ -201,7 +203,9 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
         role: 'provider',
         clinic_id: '',
         provider_id: '',
-        highlight_color: '#6B7280'
+        highlight_color: '#6B7280',
+        hourly_rate: 0,
+        timecard_option: false
       });
       loadUsers();
     } catch (error: any) {
@@ -222,7 +226,9 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
           role: editingUser.role,
           clinic_id: editingUser.clinic_id,
           provider_id: editingUser.provider_id,
-          highlight_color: (editingUser as any).highlight_color
+          highlight_color: (editingUser as any).highlight_color,
+          hourly_rate: (editingUser as any).hourly_rate || 0,
+          timecard_option: (editingUser as any).timecard_option || false
         })
         .eq('id', editingUser.id);
 
@@ -394,6 +400,12 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                         Highlight
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Hourly Rate
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Timecard
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Created
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -424,6 +436,16 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                             <span className="text-xs text-gray-600">{user.highlight_color || '#'}</span>
                           </div>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          ${(user as any).hourly_rate || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            (user as any).timecard_option ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {(user as any).timecard_option ? 'Yes' : 'No'}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {new Date(user.created_at).toLocaleDateString()}
                         </td>
@@ -437,7 +459,10 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                               <Mail size={16} />
                             </button>
                             <button
-                              onClick={() => setEditingUser(user)}
+                              onClick={() => {
+                                setEditingUser(user);
+                                setShowAddUser(true);
+                              }}
                               className="text-indigo-600 hover:text-indigo-900"
                               title="Edit User"
                             >
@@ -877,9 +902,12 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Add New User</h3>
+              <h3 className="text-lg font-semibold">{editingUser ? 'Edit User' : 'Add New User'}</h3>
               <button
-                onClick={() => setShowAddUser(false)}
+                onClick={() => {
+                  setShowAddUser(false);
+                  setEditingUser(null);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X size={20} />
@@ -892,8 +920,11 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                 </label>
                 <input
                   type="text"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  value={editingUser ? editingUser.name : newUser.name}
+                  onChange={(e) => editingUser ? 
+                    setEditingUser({ ...editingUser, name: e.target.value }) :
+                    setNewUser({ ...newUser, name: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="Full Name"
                 />
@@ -904,8 +935,11 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                 </label>
                 <input
                   type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  value={editingUser ? editingUser.email : newUser.email}
+                  onChange={(e) => editingUser ? 
+                    setEditingUser({ ...editingUser, email: e.target.value }) :
+                    setNewUser({ ...newUser, email: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="email@example.com"
                 />
@@ -915,8 +949,11 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                   Role
                 </label>
                 <select
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                  value={editingUser ? editingUser.role : newUser.role}
+                  onChange={(e) => editingUser ? 
+                    setEditingUser({ ...editingUser, role: e.target.value }) :
+                    setNewUser({ ...newUser, role: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 >
                   {roleOptions.map(role => (
@@ -963,19 +1000,72 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                   placeholder="Provider ID"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hourly Rate
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editingUser ? (editingUser as any).hourly_rate || 0 : newUser.hourly_rate}
+                  onChange={(e) => editingUser ? 
+                    setEditingUser({ ...editingUser, hourly_rate: parseFloat(e.target.value) || 0 } as any) :
+                    setNewUser({ ...newUser, hourly_rate: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Timecard Option
+                </label>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="timecard_option"
+                      checked={editingUser ? (editingUser as any).timecard_option === true : newUser.timecard_option === true}
+                      onChange={() => editingUser ? 
+                        setEditingUser({ ...editingUser, timecard_option: true } as any) :
+                        setNewUser({ ...newUser, timecard_option: true })
+                      }
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Yes</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="timecard_option"
+                      checked={editingUser ? (editingUser as any).timecard_option === false : newUser.timecard_option === false}
+                      onChange={() => editingUser ? 
+                        setEditingUser({ ...editingUser, timecard_option: false } as any) :
+                        setNewUser({ ...newUser, timecard_option: false })
+                      }
+                      className="mr-2"
+                    />
+                    <span className="text-sm">No</span>
+                  </label>
+                </div>
+              </div>
             </div>
             <div className="flex justify-end space-x-3 mt-6">
               <button
-                onClick={() => setShowAddUser(false)}
+                onClick={() => {
+                  setShowAddUser(false);
+                  setEditingUser(null);
+                }}
                 className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={createUser}
+                onClick={editingUser ? updateUser : createUser}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
               >
-                Create User
+                {editingUser ? 'Update User' : 'Create User'}
               </button>
             </div>
           </div>
@@ -987,7 +1077,7 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Add Billing Code</h3>
+              <h3 className="text-lg font-semibold text-black">Add Billing Code</h3>
               <button
                 onClick={() => setShowAddCode(false)}
                 className="text-gray-400 hover:text-gray-600"

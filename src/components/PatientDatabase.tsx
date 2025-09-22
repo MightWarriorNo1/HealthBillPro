@@ -148,14 +148,20 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
   // Note: row-level delete moved out of the main grid UI for now
 
   const filteredPatients = patients.filter(patient => {
-    const matchesSearch = 
-      patient.patientId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.insurance.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesInsurance = filterInsurance === 'all' || patient.insurance === filterInsurance;
-    
+    const term = (searchTerm || '').toLowerCase();
+    const patientIdLc = String(patient.patientId ?? '').toLowerCase();
+    const firstNameLc = String(patient.firstName ?? '').toLowerCase();
+    const lastNameLc = String(patient.lastName ?? '').toLowerCase();
+    const insuranceLc = String(patient.insurance ?? '').toLowerCase();
+
+    const matchesSearch =
+      patientIdLc.includes(term) ||
+      firstNameLc.includes(term) ||
+      lastNameLc.includes(term) ||
+      insuranceLc.includes(term);
+
+    const matchesInsurance = filterInsurance === 'all' || String(patient.insurance ?? '') === filterInsurance;
+
     return matchesSearch && matchesInsurance;
   });
 
@@ -232,7 +238,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
         <select
           value={filterInsurance}
           onChange={(e) => setFilterInsurance(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          className="px-4 py-2 border text-black border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
         >
           <option value="all">All Insurance</option>
           {insuranceOptions.map(insurance => (

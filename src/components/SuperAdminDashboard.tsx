@@ -186,7 +186,10 @@ function SuperAdminDashboard() {
                 setSelectedProvider(null);
               }
             }
-            setIsSidebarOpen(false);
+            // Only close sidebar on mobile devices
+            if (window.innerWidth < 1024) {
+              setIsSidebarOpen(false);
+            }
           }}
           className={`w-full flex items-center space-x-3 px-3 py-3 rounded-lg text-left font-medium text-sm transition-colors ${
             isActive || (item.id === 'clinics' && selectedClinic) || (item.id === 'settings' && activeTab.startsWith('user-management'))
@@ -609,7 +612,7 @@ function SuperAdminDashboard() {
           fixed lg:fixed inset-y-0 left-0 z-40 lg:z-auto
           w-64 bg-white shadow-sm border-r border-gray-200
           transform transition-transform duration-300 ease-in-out
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:-translate-x-full'}
           lg:top-24
         `}>
           <nav className="p-4 space-y-2 h-full overflow-y-auto">
@@ -630,7 +633,7 @@ function SuperAdminDashboard() {
           />
         )}
 
-        <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-auto lg:ml-64 min-h-screen" style={{ marginTop: '80px' }}>
+        <div className={`flex-1 p-3 sm:p-4 lg:p-6 overflow-x-auto transition-all duration-300 ${isSidebarOpen ? 'lg:ml-64' : 'lg:ml-0'} min-h-screen`} style={{ marginTop: '80px' }}>
           <div className="max-w-full w-full">
             {renderTabContent()}
           </div>

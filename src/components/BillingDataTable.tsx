@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import ExcelTable, { ExcelColumn, ExcelRow } from './ExcelTable';
 import MonthlyAccountsReceivable from './MonthlyAccountsReceivable';
+import { supabase } from '../lib/supabase';
 
 interface BillingDataTableProps {
   clinicId?: string;
@@ -21,13 +22,17 @@ function BillingDataTable({
   const { billingEntries, patients, providers, clinics, refreshBillingEntries } = useData();
   const [data, setData] = useState<ExcelRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [billingCodes, setBillingCodes] = useState<Array<{code: string, description: string}>>([]);
 
   // Load data when props change
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        await refreshBillingEntries(clinicId, providerId, month);
+        await Promise.all([
+          refreshBillingEntries(clinicId, providerId, month),
+          loadBillingCodes()
+        ]);
       } catch (error) {
         console.error('Error loading billing data:', error);
       } finally {
@@ -37,6 +42,55 @@ function BillingDataTable({
 
     loadData();
   }, [clinicId, providerId, month, refreshBillingEntries]);
+
+  const loadBillingCodes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('billing_codes')
+        .select('code, description')
+        .order('code', { ascending: true });
+      if (error) throw error;
+      setBillingCodes(data || []);
+    } catch (err) {
+      console.error('Failed to load billing codes', err);
+    }
+  };
+
+  const getPreviousMonth = (month: string): string => {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December'];
+    const currentIndex = months.indexOf(month);
+    return currentIndex > 0 ? months[currentIndex - 1] : 'December';
+  };
+
+  // Calculate billing tracker metrics
+  const billingMetrics = useMemo(() => {
+    const claimsNotPaid = data.filter(row => 
+      row.claim_status && !['Paid', 'IP'].includes(row.claim_status)
+    ).length;
+    
+    const totalCollectedFromIns = data.reduce((sum, row) => 
+      sum + (Number(row.ins_pay) || 0), 0
+    );
+    
+    const totalCollectedFromPt = data.reduce((sum, row) => 
+      sum + (Number(row.collected_from_pt) || 0), 0
+    );
+    
+    const totalCollected = totalCollectedFromIns + totalCollectedFromPt;
+    
+    const overdueInvoices = data.filter(row => 
+      row.pt_pay_status === 'Overdue'
+    ).length;
+    
+    return {
+      claimsNotPaid,
+      totalCollectedFromIns,
+      totalCollectedFromPt,
+      totalCollected,
+      overdueInvoices
+    };
+  }, [data]);
 
   // Convert billing entries to Excel format
   useEffect(() => {
@@ -75,15 +129,7 @@ function BillingDataTable({
         pt_payment_ar_bal_date: entry.status === 'paid' ? entry.date : '',
         total_pay: entry.amount,
         // Notes
-        notes: entry.notes || 'No additional notes',
-        // ACCOUNTS RECEIVABLE
-        ar_id: `AR${entry.id.slice(-4)}`,
-        ar_name: entry.patientName,
-        ar_date_of_service: entry.date,
-        ar_amount: entry.status === 'paid' ? 0 : entry.amount * 0.2,
-        ar_date_recorded: entry.date,
-        ar_type: entry.status === 'paid' ? 'Payment' : 'Outstanding',
-        ar_notes: entry.status === 'paid' ? 'Fully paid' : 'Pending payment'
+        notes: entry.notes || 'No additional notes'
       };
     });
 
@@ -142,7 +188,7 @@ function BillingDataTable({
     {
       id: 'date_of_service',
       label: 'Date of Service',
-      type: 'date',
+      type: 'date-mmddyy',
       width: 130,
       editable: canEdit,
       required: true
@@ -152,10 +198,11 @@ function BillingDataTable({
     {
       id: 'cpt_code',
       label: 'CPT Code',
-      type: 'text',
+      type: 'select',
       width: 100,
       editable: canEdit,
-      required: true
+      required: true,
+      options: billingCodes.map(code => code.code)
     },
     {
       id: 'appt_note_status',
@@ -178,7 +225,7 @@ function BillingDataTable({
     {
       id: 'most_recent_submit_date',
       label: 'Most Recent Submit Date',
-      type: 'date',
+      type: 'date-mmd',
       width: 180,
       editable: canEdit
     },
@@ -192,7 +239,7 @@ function BillingDataTable({
     {
       id: 'ins_pay_date',
       label: 'Ins Pay Date',
-      type: 'date',
+      type: 'month',
       width: 130,
       editable: canEdit
     },
@@ -221,7 +268,7 @@ function BillingDataTable({
     {
       id: 'pt_payment_ar_bal_date',
       label: 'PT Payment AR Bal Date',
-      type: 'date',
+      type: 'month',
       width: 180,
       editable: canEdit
     },
@@ -242,57 +289,6 @@ function BillingDataTable({
       editable: canEdit
     },
     
-    // AUGUST ACCOUNTS RECEIVABLE section (Blue background)
-    {
-      id: 'ar_id',
-      label: 'ID #',
-      type: 'text',
-      width: 80,
-      editable: canEdit
-    },
-    {
-      id: 'ar_name',
-      label: 'Name',
-      type: 'text',
-      width: 120,
-      editable: canEdit
-    },
-    {
-      id: 'ar_date_of_service',
-      label: 'Date of Service',
-      type: 'date',
-      width: 130,
-      editable: canEdit
-    },
-    {
-      id: 'ar_amount',
-      label: 'Amount',
-      type: 'currency',
-      width: 100,
-      editable: canEdit
-    },
-    {
-      id: 'ar_date_recorded',
-      label: 'Date Recorded',
-      type: 'date',
-      width: 130,
-      editable: canEdit
-    },
-    {
-      id: 'ar_type',
-      label: 'Type',
-      type: 'select',
-      width: 100,
-      editable: canEdit,
-      options: ['Payment', 'Adjustment', 'Refund', 'Write-off']
-    },
-    {
-      id: 'ar_notes',
-      label: 'Notes',
-      type: 'text',
-      width: 150,
-      editable: canEdit
-    }
   ];
 
   const handleDataChange = (newData: ExcelRow[]) => {
@@ -352,6 +348,82 @@ function BillingDataTable({
 
   return (
     <div className="space-y-4 w-full">
+      {/* Billing Tracker */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing Sheet Tracker</h3>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
+            <div className="flex items-center">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Claims Not Paid</p>
+                <p className="text-2xl font-bold text-gray-900">{billingMetrics.claimsNotPaid}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+            <div className="flex items-center">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Collected from Insurance</p>
+                <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollectedFromIns.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Collected from Patients</p>
+                <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollectedFromPt.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+            <div className="flex items-center">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Total Collected</p>
+                <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollected.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
+            <div className="flex items-center">
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Overdue Invoices</p>
+                <p className="text-2xl font-bold text-gray-900">{billingMetrics.overdueInvoices}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Section Headers */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 text-sm font-medium">
         <div className="bg-blue-100 text-blue-800 px-3 py-2 rounded text-center sm:text-left">
@@ -368,14 +440,24 @@ function BillingDataTable({
         </div>
       </div>
       
-      {/* Monthly Accounts Receivable Section */}
+      {/* Monthly Accounts Receivable Section - Separate from current month billing */}
       {month && (
-        <MonthlyAccountsReceivable
-          clinicId={clinicId}
-          providerId={providerId}
-          month={month}
-          canEdit={canEdit}
-        />
+        <div className="mt-8">
+          <div className="bg-gray-100 border-l-4 border-gray-400 p-4 mb-4">
+            <h3 className="text-lg font-semibold text-gray-800">
+              {month} Accounts Receivable
+            </h3>
+            <p className="text-sm text-gray-600">
+              This section tracks payments collected in {month} for services provided in previous months (Jan-{month === 'January' ? 'Dec' : getPreviousMonth(month)})
+            </p>
+          </div>
+          <MonthlyAccountsReceivable
+            clinicId={clinicId}
+            providerId={providerId}
+            month={month}
+            canEdit={canEdit}
+          />
+        </div>
       )}
 
       {/* Excel Table */}
@@ -430,18 +512,6 @@ function BillingDataTable({
               <li>PT Pay Status: Patient payment status</li>
               <li>PT Payment AR Bal Date: AR balance date</li>
               <li>Total Pay: Total payment received</li>
-            </ul>
-          </div>
-          <div>
-            <h5 className="font-medium text-purple-800 mb-1">AUGUST ACCOUNTS RECEIVABLE:</h5>
-            <ul className="list-disc list-inside space-y-1">
-              <li>ID #: AR record identifier</li>
-              <li>Name: Patient name</li>
-              <li>Date of Service: Service date</li>
-              <li>Amount: Outstanding amount</li>
-              <li>Date Recorded: When AR was recorded</li>
-              <li>Type: Type of AR entry</li>
-              <li>Notes: Additional notes</li>
             </ul>
           </div>
         </div>

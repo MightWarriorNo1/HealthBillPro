@@ -63,6 +63,17 @@ function Header({ title, subtitle, onMenuToggle, isMenuOpen }: HeaderProps) {
               </button>
             )}
             
+            {/* Desktop sidebar toggle button */}
+            {onMenuToggle && (
+              <button
+                onClick={onMenuToggle}
+                className="hidden lg:block p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                title={isMenuOpen ? 'Hide Sidebar' : 'Show Sidebar'}
+              >
+                {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+              </button>
+            )}
+            
             <Logo size={32} className="sm:hidden" showText={false} />
             <Logo size={40} className="hidden sm:block" showText={false} />
             

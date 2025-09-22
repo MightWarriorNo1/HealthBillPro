@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   DollarSign, Plus, Edit, Save, X, Search, Filter, 
   Lock, Unlock, AlertCircle, CheckCircle, Calendar,
-  FileText, CreditCard, Building2
+  FileText, CreditCard, Building2, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -35,13 +35,15 @@ interface AccountsReceivableProps {
   canEdit?: boolean;
   canLock?: boolean;
   isLocked?: boolean;
+  showMonthlySubcategories?: boolean;
 }
 
 function AccountsReceivable({ 
   clinicId, 
   canEdit = true, 
   canLock = false,
-  isLocked = false 
+  isLocked = false,
+  showMonthlySubcategories = false
 }: AccountsReceivableProps) {
   const [arEntries, setArEntries] = useState<AccountsReceivableEntry[]>([]);
   const [providerPayments, setProviderPayments] = useState<ProviderPayment[]>([]);
@@ -53,6 +55,9 @@ function AccountsReceivable({
   const [editingPayment, setEditingPayment] = useState<ProviderPayment | null>(null);
   const [filterType, setFilterType] = useState('all');
   const [lockedColumns, setLockedColumns] = useState<string[]>([]);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
   const [newEntry, setNewEntry] = useState({
     patient_id: '',
@@ -314,11 +319,59 @@ function AccountsReceivable({
   const totalArAmount = arEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const totalProviderPay = providerPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
+  // Group AR entries by month for subcategory display
+  const monthlyArData = useMemo(() => {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const grouped: Record<string, { entries: AccountsReceivableEntry[], total: number }> = {};
+    
+    arEntries.forEach(entry => {
+      const entryDate = new Date(entry.date);
+      const monthKey = `${entryDate.getFullYear()}-${entryDate.getMonth() + 1}`;
+      const monthName = months[entryDate.getMonth()];
+      
+      if (!grouped[monthKey]) {
+        grouped[monthKey] = { entries: [], total: 0 };
+      }
+      
+      grouped[monthKey].entries.push(entry);
+      grouped[monthKey].total += entry.amount;
+    });
+    
+    return Object.entries(grouped).map(([monthKey, data]) => ({
+      monthKey,
+      monthName: months[parseInt(monthKey.split('-')[1]) - 1],
+      year: parseInt(monthKey.split('-')[0]),
+      ...data
+    })).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  }, [arEntries]);
+
+  const toggleMonthExpansion = (monthKey: string) => {
+    setExpandedMonths(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(monthKey)) {
+        newSet.delete(monthKey);
+      } else {
+        newSet.add(monthKey);
+      }
+      return newSet;
+    });
+  };
+
   const arColumns: ColDef[] = useMemo(() => ([
     { field: 'patient_id', headerName: 'Patient ID', editable: canEdit && !isLocked },
-    { field: 'date', headerName: 'Date', editable: canEdit && !isLocked },
+    { field: 'date', headerName: 'A/R Date Recorded', editable: canEdit && !isLocked, valueFormatter: (p: any) => {
+      if (!p.value) return '';
+      const d = new Date(p.value);
+      if (isNaN(d.getTime())) return p.value;
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const yy = String(d.getFullYear()).slice(-2);
+      return `${mm}-${dd}-${yy}`;
+    } },
     { field: 'amount', headerName: 'Amount', editable: canEdit && !isLocked, valueParser: (p: any) => parseFloat(p.newValue) || 0 },
-    { field: 'type', headerName: 'Type', editable: canEdit && !isLocked },
+    { field: 'type', headerName: 'A/R Type', editable: canEdit && !isLocked, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: typeOptions } },
     { field: 'description', headerName: 'Description', editable: canEdit && !isLocked },
     { field: 'amount_owed', headerName: 'Amount Owed', editable: canEdit && !isLocked, valueParser: (p: any) => parseFloat(p.newValue) || 0 },
     { field: 'notes', headerName: 'Notes', editable: canEdit && !isLocked }
@@ -471,20 +524,80 @@ function AccountsReceivable({
         </select>
       </div>
 
-      {/* AR Entries Grid */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Accounts Receivable Entries</h3>
+      {/* Monthly Subcategories or Regular AR Grid */}
+      {showMonthlySubcategories ? (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-blue-900 mb-2">Monthly A/R Subcategories</h3>
+            <p className="text-sm text-blue-700">
+              Track payments for previous months. For example, September A/R tracks payments for services from Jan-Aug.
+            </p>
+          </div>
+          
+          {monthlyArData.map((monthData) => (
+            <div key={monthData.monthKey} className="bg-white rounded-lg shadow">
+              <div 
+                className="px-6 py-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50"
+                onClick={() => toggleMonthExpansion(monthData.monthKey)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    {expandedMonths.has(monthData.monthKey) ? 
+                      <ChevronDown className="h-5 w-5 text-gray-500" /> : 
+                      <ChevronRight className="h-5 w-5 text-gray-500" />
+                    }
+                    <h4 className="text-lg font-semibold text-gray-900">
+                      {monthData.monthName} {monthData.year}
+                    </h4>
+                    <span className="text-sm text-gray-500">
+                      ({monthData.entries.length} entries)
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-gray-900">
+                      ${monthData.total.toLocaleString()}
+                    </div>
+                    <div className="text-sm text-gray-500">Total A/R</div>
+                  </div>
+                </div>
+              </div>
+              
+              {expandedMonths.has(monthData.monthKey) && (
+                <div className="px-4 py-4">
+                  <DataGrid
+                    columnDefs={arColumns}
+                    rowData={monthData.entries}
+                    readOnly={!canEdit || isLocked}
+                    onCellValueChanged={onArCellChanged}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+          
+          {monthlyArData.length === 0 && (
+            <div className="bg-white rounded-lg shadow p-8 text-center">
+              <FileText className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No A/R data available</h3>
+              <p className="mt-1 text-sm text-gray-500">Add some accounts receivable entries to see monthly subcategories.</p>
+            </div>
+          )}
         </div>
-        <div className="px-4 py-4">
-          <DataGrid
-            columnDefs={arColumns}
-            rowData={filteredEntries}
-            readOnly={!canEdit || isLocked}
-            onCellValueChanged={onArCellChanged}
-          />
+      ) : (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Accounts Receivable Entries</h3>
+          </div>
+          <div className="px-4 py-4">
+            <DataGrid
+              columnDefs={arColumns}
+              rowData={filteredEntries}
+              readOnly={!canEdit || isLocked}
+              onCellValueChanged={onArCellChanged}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Provider Payments Grid */}
       <div className="bg-white rounded-lg shadow">
