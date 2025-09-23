@@ -11,6 +11,7 @@ export interface ExcelColumn {
   type: 'text' | 'number' | 'date' | 'select' | 'currency' | 'date-mmddyy' | 'date-mmd' | 'month';
   width?: number;
   options?: string[];
+  optionColors?: Record<string, string>; // tailwind class for display badge
   editable?: boolean;
   required?: boolean;
 }
@@ -51,6 +52,7 @@ function ExcelTable({
   title,
   subtitle
 }: ExcelTableProps) {
+  const MIN_ROWS = 200;
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -59,9 +61,30 @@ function ExcelTable({
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
 
+  const isPlaceholderRow = useCallback((rowId: string) => rowId.startsWith('placeholder-'), []);
+
+  // Build placeholder rows to always show a 200-row grid
+  const placeholderRows = useMemo(() => {
+    const count = Math.max(0, MIN_ROWS - data.length);
+    return Array.from({ length: count }).map((_, index) => {
+      const placeholder: ExcelRow = {
+        id: `placeholder-${index}`
+      };
+      columns.forEach(col => {
+        placeholder[col.id] = col.type === 'number' || col.type === 'currency' ? 0 : '';
+      });
+      return placeholder;
+    });
+  }, [data.length, columns]);
+
+  // Data used for rendering/filtering/sorting (real data + placeholders)
+  const displayData = useMemo(() => {
+    return [...data, ...placeholderRows];
+  }, [data, placeholderRows]);
+
   // Filter and sort data
   const filteredAndSortedData = useMemo(() => {
-    let filtered = data.filter(row => {
+    let filtered = displayData.filter(row => {
       // Apply search filter
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
@@ -96,7 +119,7 @@ function ExcelTable({
     }
 
     return filtered;
-  }, [data, filters, searchTerm, sortColumn, sortDirection, columns]);
+  }, [displayData, filters, searchTerm, sortColumn, sortDirection, columns]);
 
   const handleSort = useCallback((columnId: string) => {
     if (sortColumn === columnId) {
@@ -145,13 +168,29 @@ function ExcelTable({
         processedValue = editingValue;
     }
 
-    if (onRowUpdate) {
-      onRowUpdate(rowId, { [columnId]: processedValue });
+    // If editing a placeholder row, convert to a real row
+    if (isPlaceholderRow(rowId)) {
+      const newRow: ExcelRow = {
+        id: `new-${Date.now()}`,
+        ...columns.reduce((acc, col) => {
+          acc[col.id] = col.id === columnId ? processedValue : (col.type === 'number' || col.type === 'currency' ? 0 : '');
+          return acc;
+        }, {} as Record<string, any>)
+      };
+      if (onRowAdd) {
+        onRowAdd(newRow);
+      } else if (onDataChange) {
+        onDataChange([...data, newRow]);
+      }
+    } else {
+      if (onRowUpdate) {
+        onRowUpdate(rowId, { [columnId]: processedValue });
+      }
     }
 
     setEditingCell(null);
     setEditingValue('');
-  }, [editingCell, editingValue, columns, onRowUpdate]);
+  }, [editingCell, editingValue, columns, onRowUpdate, isPlaceholderRow, onRowAdd, onDataChange, data]);
 
   const handleCellCancel = useCallback(() => {
     setEditingCell(null);
@@ -179,6 +218,7 @@ function ExcelTable({
   }, [onRowDelete]);
 
   const handleSelectRow = useCallback((rowId: string) => {
+    if (isPlaceholderRow(rowId)) return;
     setSelectedRows(prev => {
       const newSet = new Set(prev);
       if (newSet.has(rowId)) {
@@ -188,20 +228,23 @@ function ExcelTable({
       }
       return newSet;
     });
-  }, []);
+  }, [isPlaceholderRow]);
 
   const handleSelectAll = useCallback(() => {
-    if (selectedRows.size === filteredAndSortedData.length) {
+    const selectableIds = filteredAndSortedData.filter(r => !isPlaceholderRow(r.id)).map(r => r.id);
+    if (selectedRows.size === selectableIds.length) {
       setSelectedRows(new Set());
     } else {
-      setSelectedRows(new Set(filteredAndSortedData.map(row => row.id)));
+      setSelectedRows(new Set(selectableIds));
     }
-  }, [selectedRows, filteredAndSortedData]);
+  }, [selectedRows, filteredAndSortedData, isPlaceholderRow]);
 
   const handleExport = useCallback(() => {
     const csvContent = [
       columns.map(col => col.label).join(','),
-      ...filteredAndSortedData.map(row => 
+      ...filteredAndSortedData
+        .filter(row => !isPlaceholderRow(row.id))
+        .map(row => 
         columns.map(col => {
           const value = row[col.id] || '';
           return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
@@ -216,7 +259,7 @@ function ExcelTable({
     a.download = `${title || 'data'}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-  }, [columns, filteredAndSortedData, title]);
+  }, [columns, filteredAndSortedData, title, isPlaceholderRow]);
 
   const handleBulkImport = useCallback(() => {
     const input = document.createElement('input');
@@ -349,7 +392,11 @@ function ExcelTable({
     
     switch (column.type) {
       case 'currency':
-        displayValue = `$${Number(value).toFixed(2)}`;
+        if (value === null || value === undefined || Number(value) === 0) {
+          displayValue = '';
+        } else {
+          displayValue = `$${Number(value).toFixed(2)}`;
+        }
         break;
       case 'date-mmddyy':
         displayValue = formatDateMMDDYY(value);
@@ -364,12 +411,18 @@ function ExcelTable({
         displayValue = value || '';
     }
 
+    const badge = (text: string, cls: string) => (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${cls}`}>
+        {text}
+      </span>
+    );
+
     return (
       <div className="flex items-center justify-between group">
         {column.type === 'month' && displayValue ? (
-          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getMonthColor(displayValue)}`}>
-            {displayValue}
-          </span>
+          badge(displayValue, getMonthColor(displayValue))
+        ) : column.type === 'select' && displayValue ? (
+          badge(displayValue, column.optionColors?.[displayValue] || 'bg-gray-100 text-gray-800')
         ) : (
           <span className="text-sm">{displayValue}</span>
         )}
@@ -460,18 +513,18 @@ function ExcelTable({
 
           {/* Right Section - Row Count */}
           <div className="text-sm text-gray-600 bg-white px-3 py-2 rounded-lg border">
-            <span className="font-medium">{filteredAndSortedData.length}</span> of <span className="font-medium">{data.length}</span> rows
+            <span className="font-medium">{filteredAndSortedData.filter(r => !isPlaceholderRow(r.id)).length}</span> of <span className="font-medium">{MIN_ROWS}</span> rows
           </div>
         </div>
       </div>
 
       {/* Table */}
       <div className="overflow-x-auto w-full">
-        <table className="w-full min-w-max">
+        <table className="w-full min-w-max table-fixed border border-gray-200 rounded-lg">
           <thead className="bg-gray-50">
             <tr>
               {/* Select All Checkbox */}
-              <th className="px-4 py-3 text-left w-12">
+              <th className="px-4 py-3 text-left w-12 border-b border-gray-200">
                 <div className="flex flex-col items-center space-y-2">
                   <input
                     type="checkbox"
@@ -487,7 +540,7 @@ function ExcelTable({
               {columns.map(column => (
                 <th
                   key={column.id}
-                  className="px-4 py-3 text-left font-medium text-gray-900 whitespace-nowrap"
+                  className="px-4 py-3 text-left font-medium text-gray-900 whitespace-nowrap border-b border-gray-200"
                   style={{ width: column.width ? `${column.width}px` : 'auto' }}
                 >
                   <div className="flex flex-col space-y-2">
@@ -533,12 +586,13 @@ function ExcelTable({
             {filteredAndSortedData.map(row => (
               <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                 {/* Row Checkbox */}
-                <td className="px-4 py-3 w-12">
+                <td className="px-4 py-3 w-12 border-r border-gray-200">
                   <div className="flex justify-center">
                     <input
                       type="checkbox"
                       checked={selectedRows.has(row.id)}
                       onChange={() => handleSelectRow(row.id)}
+                      disabled={isPlaceholderRow(row.id)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </div>
@@ -548,7 +602,7 @@ function ExcelTable({
                 {columns.map(column => (
                   <td
                     key={column.id}
-                    className="px-4 py-3 text-sm text-gray-900 min-w-0"
+                    className="px-4 py-3 text-sm text-gray-900 min-w-0 border-r border-gray-200"
                     style={{ width: column.width ? `${column.width}px` : 'auto' }}
                   >
                     <div className="truncate">

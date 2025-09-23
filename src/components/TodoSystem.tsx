@@ -152,15 +152,6 @@ function TodoSystem({ clinicId, canEdit = true }: TodoSystemProps) {
           <h2 className="text-2xl font-bold text-gray-900">To-Do Items</h2>
           <p className="text-gray-600">Manage billing follow-ups and claim issues</p>
         </div>
-        {canEdit && (
-          <button
-            onClick={() => setShowAddItem(true)}
-            className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <Plus size={16} />
-            <span>Add Item</span>
-          </button>
-        )}
       </div>
 
       {/* Filters */}

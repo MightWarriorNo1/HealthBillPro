@@ -295,10 +295,15 @@ class DataService {
     }
 
     if (month) {
-      const [monthName, year] = month.split(' ');
-      const monthNumber = new Date(`${monthName} 1, ${year}`).getMonth() + 1;
+      // Accept formats: 'January', 'Jan 2025', 'January 2025'
+      const parts = month.trim().split(/\s+/);
+      const monthName = parts[0];
+      const year = parts[1] || String(new Date().getFullYear());
+      const parsed = new Date(`${monthName} 1, ${year}`);
+      const monthNumber = isNaN(parsed.getTime()) ? (new Date().getMonth() + 1) : (parsed.getMonth() + 1);
+      const lastDay = new Date(Number(year), monthNumber, 0).getDate();
       const startDate = `${year}-${monthNumber.toString().padStart(2, '0')}-01`;
-      const endDate = `${year}-${monthNumber.toString().padStart(2, '0')}-31`;
+      const endDate = `${year}-${monthNumber.toString().padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
       
       query = query.gte('date', startDate).lte('date', endDate);
     }
@@ -427,10 +432,14 @@ class DataService {
     }
 
     if (month) {
-      const [monthName, year] = month.split(' ');
-      const monthNumber = new Date(`${monthName} 1, ${year}`).getMonth() + 1;
+      const parts = month.trim().split(/\s+/);
+      const monthName = parts[0];
+      const year = parts[1] || String(new Date().getFullYear());
+      const parsed = new Date(`${monthName} 1, ${year}`);
+      const monthNumber = isNaN(parsed.getTime()) ? (new Date().getMonth() + 1) : (parsed.getMonth() + 1);
+      const lastDay = new Date(Number(year), monthNumber, 0).getDate();
       const startDate = `${year}-${monthNumber.toString().padStart(2, '0')}-01`;
-      const endDate = `${year}-${monthNumber.toString().padStart(2, '0')}-31`;
+      const endDate = `${year}-${monthNumber.toString().padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
       
       query = query.gte('date', startDate).lte('date', endDate);
     }

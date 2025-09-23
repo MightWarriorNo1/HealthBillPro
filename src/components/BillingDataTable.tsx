@@ -23,6 +23,7 @@ function BillingDataTable({
   const [data, setData] = useState<ExcelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [billingCodes, setBillingCodes] = useState<Array<{code: string, description: string}>>([]);
+  const [activeTab, setActiveTab] = useState<'billing' | 'ar'>('billing');
 
   // Load data when props change
   useEffect(() => {
@@ -92,49 +93,11 @@ function BillingDataTable({
     };
   }, [data]);
 
-  // Convert billing entries to Excel format
+  // Start with a completely blank spreadsheet (200 placeholder rows handled by ExcelTable)
+  // Ignore any prefetched demo/mock entries in context
   useEffect(() => {
-    const filteredEntries = billingEntries.filter(entry => {
-      if (clinicId && entry.clinicId !== clinicId) return false;
-      if (providerId && entry.providerId !== providerId) return false;
-      return true;
-    });
-
-    const excelData: ExcelRow[] = filteredEntries.map((entry, index) => {
-      const patient = patients.find(p => p.patientId === entry.patientName.split(' ')[0] + entry.patientName.split(' ')[1]);
-      const provider = providers.find(p => p.id === entry.providerId);
-      const clinic = clinics.find(c => c.id === entry.clinicId);
-      
-      return {
-        id: entry.id,
-        // ADMIN section
-        id_field: patient?.patientId || `PAT${index + 1}`,
-        first_name: entry.patientName.split(' ')[0],
-        last_initial: entry.patientName.split(' ')[1]?.charAt(0) || '',
-        ins: patient?.insurance || 'Unknown',
-        co_pay: patient?.copay || 0,
-        co_ins: patient?.coinsurance || 0,
-        date_of_service: entry.date,
-        // PROVIDER section
-        cpt_code: entry.procedureCode,
-        appt_note_status: 'Complete',
-        // BILLING section
-        claim_status: entry.status,
-        most_recent_submit_date: entry.date,
-        ins_pay: entry.amount * 0.8, // Assume 80% insurance coverage
-        ins_pay_date: entry.status === 'paid' ? entry.date : '',
-        pt_res: entry.amount * 0.2, // Assume 20% patient responsibility
-        collected_from_pt: entry.status === 'paid' ? entry.amount * 0.2 : 0,
-        pt_pay_status: entry.status === 'paid' ? 'Paid' : 'Pending',
-        pt_payment_ar_bal_date: entry.status === 'paid' ? entry.date : '',
-        total_pay: entry.amount,
-        // Notes
-        notes: entry.notes || 'No additional notes'
-      };
-    });
-
-    setData(excelData);
-  }, [billingEntries, patients, providers, clinics, clinicId, providerId]);
+    setData([]);
+  }, [clinicId, providerId, month]);
 
   // Define columns based on the second image structure
   const columns: ExcelColumn[] = [
@@ -169,7 +132,16 @@ function BillingDataTable({
       type: 'select',
       width: 120,
       editable: canEdit,
-      options: ['Blue Cross', 'Aetna', 'Cigna', 'UnitedHealth', 'Medicare', 'Medicaid', 'Self Pay']
+      options: ['Blue Cross', 'Aetna', 'Cigna', 'UnitedHealth', 'Medicare', 'Medicaid', 'Self Pay'],
+      optionColors: {
+        'Blue Cross': 'bg-blue-100 text-blue-800',
+        'Aetna': 'bg-purple-100 text-purple-800',
+        'Cigna': 'bg-green-100 text-green-800',
+        'UnitedHealth': 'bg-indigo-100 text-indigo-800',
+        'Medicare': 'bg-sky-100 text-sky-800',
+        'Medicaid': 'bg-teal-100 text-teal-800',
+        'Self Pay': 'bg-orange-100 text-orange-800'
+      }
     },
     {
       id: 'co_pay',
@@ -210,7 +182,15 @@ function BillingDataTable({
       type: 'select',
       width: 150,
       editable: canEdit,
-      options: ['Complete', 'PP Complete', 'Charge NS/LC', 'RS No Charge', 'NS No Charge', 'Note not complete']
+      options: ['Complete', 'PP Complete', 'Charge NS/LC', 'RS No Charge', 'NS No Charge', 'Note not complete'],
+      optionColors: {
+        'Complete': 'bg-green-100 text-green-800',
+        'PP Complete': 'bg-emerald-100 text-emerald-800',
+        'Charge NS/LC': 'bg-red-100 text-red-800',
+        'RS No Charge': 'bg-yellow-100 text-yellow-800',
+        'NS No Charge': 'bg-orange-100 text-orange-800',
+        'Note not complete': 'bg-gray-100 text-gray-800'
+      }
     },
     
     // BILLING section (Green background)
@@ -220,7 +200,19 @@ function BillingDataTable({
       type: 'select',
       width: 120,
       editable: canEdit,
-      options: ['Claim Sent', 'RS', 'IP', 'Paid', 'Deductible', 'N/A', 'PP', 'Denial', 'Rejection', 'No Coverage']
+      options: ['Claim Sent', 'RS', 'IP', 'Paid', 'Deductible', 'N/A', 'PP', 'Denial', 'Rejection', 'No Coverage'],
+      optionColors: {
+        'Claim Sent': 'bg-blue-100 text-blue-800',
+        'RS': 'bg-cyan-100 text-cyan-800',
+        'IP': 'bg-yellow-100 text-yellow-800',
+        'Paid': 'bg-green-100 text-green-800',
+        'Deductible': 'bg-amber-100 text-amber-800',
+        'N/A': 'bg-gray-100 text-gray-800',
+        'PP': 'bg-indigo-100 text-indigo-800',
+        'Denial': 'bg-red-100 text-red-800',
+        'Rejection': 'bg-rose-100 text-rose-800',
+        'No Coverage': 'bg-slate-100 text-slate-800'
+      }
     },
     {
       id: 'most_recent_submit_date',
@@ -263,7 +255,14 @@ function BillingDataTable({
       type: 'select',
       width: 120,
       editable: canEdit,
-      options: ['Paid', 'Pending', 'Overdue', 'Partial', 'None']
+      options: ['Paid', 'Pending', 'Overdue', 'Partial', 'None'],
+      optionColors: {
+        'Paid': 'bg-green-100 text-green-800',
+        'Pending': 'bg-yellow-100 text-yellow-800',
+        'Overdue': 'bg-red-100 text-red-800',
+        'Partial': 'bg-purple-100 text-purple-800',
+        'None': 'bg-gray-100 text-gray-800'
+      }
     },
     {
       id: 'pt_payment_ar_bal_date',
@@ -348,101 +347,126 @@ function BillingDataTable({
 
   return (
     <div className="space-y-4 w-full">
-      {/* Billing Tracker */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing Sheet Tracker</h3>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
-            <div className="flex items-center">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Claims Not Paid</p>
-                <p className="text-2xl font-bold text-gray-900">{billingMetrics.claimsNotPaid}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Collected from Insurance</p>
-                <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollectedFromIns.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Collected from Patients</p>
-                <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollectedFromPt.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Total Collected</p>
-                <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollected.toLocaleString()}</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
-            <div className="flex items-center">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm font-medium text-gray-500">Overdue Invoices</p>
-                <p className="text-2xl font-bold text-gray-900">{billingMetrics.overdueInvoices}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Section Headers */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 text-sm font-medium">
-        <div className="bg-blue-100 text-blue-800 px-3 py-2 rounded text-center sm:text-left">
-          ADMIN (7 columns)
-        </div>
-        <div className="bg-orange-100 text-orange-800 px-3 py-2 rounded text-center sm:text-left">
-          PROVIDER (2 columns)
-        </div>
-        <div className="bg-green-100 text-green-800 px-3 py-2 rounded text-center sm:text-left">
-          BILLING (9 columns)
-        </div>
-        <div className="bg-purple-100 text-purple-800 px-3 py-2 rounded text-center sm:text-left">
-          NOTES (1 column)
-        </div>
-      </div>
-      
-      {/* Monthly Accounts Receivable Section - Separate from current month billing */}
+      {/* Tabs header when a month is selected */}
       {month && (
-        <div className="mt-8">
+        <div className="bg-white rounded-lg shadow p-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'billing' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Billing
+            </button>
+            <button
+              onClick={() => setActiveTab('ar')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'ar' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Accounts Receivable
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Billing tab content */}
+      {activeTab === 'billing' && (
+        <>
+          {/* Billing Tracker */}
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing Sheet Tracker</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-red-100 rounded-lg">
+                    <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-500">Claims Not Paid</p>
+                    <p className="text-2xl font-bold text-gray-900">{billingMetrics.claimsNotPaid}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <svg className="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-500">Collected from Insurance</p>
+                    <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollectedFromIns.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-500">Collected from Patients</p>
+                    <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollectedFromPt.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-500">Total Collected</p>
+                    <p className="text-2xl font-bold text-gray-900">${billingMetrics.totalCollected.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm font-medium text-gray-500">Overdue Invoices</p>
+                    <p className="text-2xl font-bold text-gray-900">{billingMetrics.overdueInvoices}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section Headers */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 text-sm font-medium">
+            <div className="bg-blue-100 text-blue-800 px-3 py-2 rounded text-center sm:text-left">
+              ADMIN (7 columns)
+            </div>
+            <div className="bg-orange-100 text-orange-800 px-3 py-2 rounded text-center sm:text-left">
+              PROVIDER (2 columns)
+            </div>
+            <div className="bg-green-100 text-green-800 px-3 py-2 rounded text-center sm:text-left">
+              BILLING (9 columns)
+            </div>
+            <div className="bg-purple-100 text-purple-800 px-3 py-2 rounded text-center sm:text-left">
+              NOTES (1 column)
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Monthly Accounts Receivable - shown within AR tab */}
+      {month && activeTab === 'ar' && (
+        <div className="mt-4">
           <div className="bg-gray-100 border-l-4 border-gray-400 p-4 mb-4">
             <h3 className="text-lg font-semibold text-gray-800">
               {month} Accounts Receivable
@@ -453,69 +477,73 @@ function BillingDataTable({
           </div>
           <MonthlyAccountsReceivable
             clinicId={clinicId}
-            providerId={providerId}
-            month={month}
             canEdit={canEdit}
+            currentMonth={(['January','February','March','April','May','June','July','August','September','October','November','December'].indexOf(month) + 1) || new Date().getMonth() + 1}
+            currentYear={new Date().getFullYear()}
           />
         </div>
       )}
 
-      {/* Excel Table */}
-      <ExcelTable
-        columns={columns}
-        data={data}
-        onDataChange={handleDataChange}
-        onRowAdd={handleRowAdd}
-        onRowDelete={handleRowDelete}
-        onRowUpdate={handleRowUpdate}
-        canEdit={canEdit}
-        canAdd={canEdit}
-        canDelete={canEdit}
-        canExport={true}
-        canImport={true}
-        title={getTitle()}
-        subtitle={getSubtitle()}
-      />
+      {/* Excel Table - show in Billing tab */}
+      {activeTab === 'billing' && (
+        <ExcelTable
+          columns={columns}
+          data={data}
+          onDataChange={handleDataChange}
+          onRowAdd={handleRowAdd}
+          onRowDelete={handleRowDelete}
+          onRowUpdate={handleRowUpdate}
+          canEdit={canEdit}
+          canAdd={canEdit}
+          canDelete={canEdit}
+          canExport={true}
+          canImport={true}
+          title={getTitle()}
+          subtitle={getSubtitle()}
+        />
+      )}
 
-      {/* Additional Information */}
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <h4 className="font-medium text-gray-900 mb-2">Column Information</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-          <div>
-            <h5 className="font-medium text-blue-800 mb-1">ADMIN Section:</h5>
-            <ul className="list-disc list-inside space-y-1">
-              <li>ID: Unique patient identifier</li>
-              <li>First Name: Patient's first name</li>
-              <li>Last Initial: Patient's last name initial</li>
-              <li>Ins: Insurance provider</li>
-              <li>Co-pay: Patient copay amount</li>
-              <li>Co-ins: Patient coinsurance amount</li>
-              <li>Date of Service: When service was provided</li>
-            </ul>
-          </div>
-          <div>
-            <h5 className="font-medium text-orange-800 mb-1">PROVIDER Section:</h5>
-            <ul className="list-disc list-inside space-y-1">
-              <li>CPT Code: Procedure code</li>
-              <li>Appt/Note Status: Appointment completion status</li>
-            </ul>
-          </div>
-          <div>
-            <h5 className="font-medium text-green-800 mb-1">BILLING Section:</h5>
-            <ul className="list-disc list-inside space-y-1">
-              <li>Claim Status: Current claim status</li>
-              <li>Most Recent Submit Date: Last submission date</li>
-              <li>Ins Pay: Insurance payment amount</li>
-              <li>Ins Pay Date: Insurance payment date</li>
-              <li>PT RES: Patient responsibility</li>
-              <li>Collected from PT: Amount collected from patient</li>
-              <li>PT Pay Status: Patient payment status</li>
-              <li>PT Payment AR Bal Date: AR balance date</li>
-              <li>Total Pay: Total payment received</li>
-            </ul>
+      {/* Additional Information - show in Billing tab */}
+      {activeTab === 'billing' && (
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <h4 className="font-medium text-gray-900 mb-2">Column Information</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+            <div>
+              <h5 className="font-medium text-blue-800 mb-1">ADMIN Section:</h5>
+              <ul className="list-disc list-inside space-y-1">
+                <li>ID: Unique patient identifier</li>
+                <li>First Name: Patient's first name</li>
+                <li>Last Initial: Patient's last name initial</li>
+                <li>Ins: Insurance provider</li>
+                <li>Co-pay: Patient copay amount</li>
+                <li>Co-ins: Patient coinsurance amount</li>
+                <li>Date of Service: When service was provided</li>
+              </ul>
+            </div>
+            <div>
+              <h5 className="font-medium text-orange-800 mb-1">PROVIDER Section:</h5>
+              <ul className="list-disc list-inside space-y-1">
+                <li>CPT Code: Procedure code</li>
+                <li>Appt/Note Status: Appointment completion status</li>
+              </ul>
+            </div>
+            <div>
+              <h5 className="font-medium text-green-800 mb-1">BILLING Section:</h5>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Claim Status: Current claim status</li>
+                <li>Most Recent Submit Date: Last submission date</li>
+                <li>Ins Pay: Insurance payment amount</li>
+                <li>Ins Pay Date: Insurance payment date</li>
+                <li>PT RES: Patient responsibility</li>
+                <li>Collected from PT: Amount collected from patient</li>
+                <li>PT Pay Status: Patient payment status</li>
+                <li>PT Payment AR Bal Date: AR balance date</li>
+                <li>Total Pay: Total payment received</li>
+              </ul>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
