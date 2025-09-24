@@ -46,7 +46,7 @@ function LandingPage({ onGetStarted, onSignIn, onSignUp }: LandingPageProps) {
       icon: Users,
       title: "Provider Portal",
       description: "Secure, intuitive interface for healthcare providers to manage billing entries with spreadsheet-like familiarity.",
-      image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1f?w=600&h=400&fit=crop&crop=center",
+      image: "https://upload.wikimedia.org/wikipedia/commons/3/3f/Doctor_at_computer.jpg",
       color: "from-blue-500 to-cyan-500"
     },
     {
@@ -81,7 +81,7 @@ function LandingPage({ onGetStarted, onSignIn, onSignUp }: LandingPageProps) {
       icon: Clock,
       title: "Timecard Integration",
       description: "Built-in timecard functionality for billing employees with automated payroll calculations.",
-      image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop&crop=center",
+      image: "https://upload.wikimedia.org/wikipedia/commons/2/2a/Time_clock.jpg",
       color: "from-pink-500 to-rose-500"
     }
   ];
@@ -414,6 +414,12 @@ function LandingPage({ onGetStarted, onSignIn, onSignUp }: LandingPageProps) {
                     src={features[activeFeature].image}
                     alt={features[activeFeature].title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (target.src !== window.location.origin + '/Logo.png') {
+                        target.src = '/Logo.png';
+                      }
+                    }}
                   />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent group-hover:from-black/20 transition-all duration-300"></div>
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
