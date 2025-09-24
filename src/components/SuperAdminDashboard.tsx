@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Building2, Users, FileText, 
   Clock, BarChart3, Settings, ChevronRight,
-  UserCheck, Calendar, DollarSign, AlertCircle, Palette
+  UserCheck, DollarSign, AlertCircle, Palette
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import Header from './Header';
-import BillingDataTable from './BillingDataTable';
 import PatientDatabase from './PatientDatabase';
 import EnhancedBillingInterface from './EnhancedBillingInterface';
 import TodoSystem from './TodoSystem';
@@ -58,14 +57,18 @@ function SuperAdminDashboard() {
   });
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  // Ensure EnhancedBillingInterface reflects selected year when a provider-year tab is active
+  // Ensure EnhancedBillingInterface reflects selected year when a provider tab is active
   useEffect(() => {
-    if (activeTab.includes('provider-') && activeTab.includes('-year-')) {
-      const yearStr = activeTab.split('-year-')[1];
-      const yearNum = parseInt(yearStr, 10);
-      if (!Number.isNaN(yearNum)) {
-        window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year: yearNum } }));
+    if (activeTab.includes('provider-')) {
+      let yearNum = currentYear;
+      if (activeTab.includes('-year-')) {
+        const yearStr = activeTab.split('-year-')[1];
+        const parsed = parseInt(yearStr, 10);
+        if (!Number.isNaN(parsed)) {
+          yearNum = parsed;
+        }
       }
+      window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year: yearNum } }));
     }
   }, [activeTab]);
 
@@ -110,7 +113,6 @@ function SuperAdminDashboard() {
   };
 
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   // Calculate statistics
   useEffect(() => {
@@ -152,12 +154,7 @@ function SuperAdminDashboard() {
               .map(provider => ({
                 id: `provider-${provider.id}`,
                 label: provider.name,
-                icon: UserCheck,
-                children: years.map(y => ({
-                  id: `provider-${provider.id}-year-${y}`,
-                  label: `${y}`,
-                  icon: Calendar
-                }))
+                icon: UserCheck
               }))
           ]
         };
@@ -466,6 +463,89 @@ function SuperAdminDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Clinic Breakdowns */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Clinic Breakdowns</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {clinics.map(clinic => {
+                  const clinicProviders = providers.filter(p => p.clinicId === clinic.id);
+                  const clinicPatients = patients.filter(p => p.clinicId === clinic.id);
+                  const clinicBillingEntries = billingEntries.filter(entry => entry.clinicId === clinic.id);
+                  const clinicTodos = todoItems.filter(item => item.clinicId === clinic.id);
+                  const clinicAR = accountsReceivable.filter(ar => ar.clinicId === clinic.id);
+
+                  const paidCount = clinicBillingEntries.filter(e => e.status === 'paid').length;
+                  const pendingCount = clinicBillingEntries.filter(e => e.status === 'pending').length;
+                  const approvedCount = clinicBillingEntries.filter(e => e.status === 'approved').length;
+                  const rejectedCount = clinicBillingEntries.filter(e => e.status === 'rejected').length;
+                  const totalRevenue = clinicBillingEntries
+                    .filter(e => e.status === 'paid')
+                    .reduce((sum, e) => sum + e.amount, 0);
+                  const totalAR = clinicAR.reduce((sum, ar) => sum + ar.amountOwed, 0);
+                  const openTodos = clinicTodos.filter(t => t.status === 'waiting' || t.status === 'in_progress' || t.status === 'ip' || t.status === 'on_hold').length;
+
+                  return (
+                    <div key={clinic.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-2">
+                        <h4 className="font-medium text-gray-900">{clinic.name}</h4>
+                        <button
+                          onClick={() => {
+                            setSelectedClinic(`clinic-${clinic.id}`);
+                            setActiveTab(`clinic-${clinic.id}`);
+                          }}
+                          className="text-sm text-purple-700 hover:underline"
+                        >
+                          View Clinic
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="bg-blue-50 p-3 rounded">
+                          <div className="text-blue-900">Providers</div>
+                          <div className="text-lg font-semibold text-blue-700">{clinicProviders.length}</div>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded">
+                          <div className="text-green-900">Patients</div>
+                          <div className="text-lg font-semibold text-green-700">{clinicPatients.length}</div>
+                        </div>
+                        <div className="bg-purple-50 p-3 rounded">
+                          <div className="text-purple-900">Total Claims</div>
+                          <div className="text-lg font-semibold text-purple-700">{clinicBillingEntries.length}</div>
+                        </div>
+                        <div className="bg-yellow-50 p-3 rounded">
+                          <div className="text-yellow-900">Pending</div>
+                          <div className="text-lg font-semibold text-yellow-700">{pendingCount}</div>
+                        </div>
+                        <div className="bg-indigo-50 p-3 rounded">
+                          <div className="text-indigo-900">Approved</div>
+                          <div className="text-lg font-semibold text-indigo-700">{approvedCount}</div>
+                        </div>
+                        <div className="bg-red-50 p-3 rounded">
+                          <div className="text-red-900">Rejected</div>
+                          <div className="text-lg font-semibold text-red-700">{rejectedCount}</div>
+                        </div>
+                        <div className="bg-teal-50 p-3 rounded">
+                          <div className="text-teal-900">Paid</div>
+                          <div className="text-lg font-semibold text-teal-700">{paidCount}</div>
+                        </div>
+                        <div className="bg-orange-50 p-3 rounded">
+                          <div className="text-orange-900">Revenue (Paid)</div>
+                          <div className="text-lg font-semibold text-orange-700">${totalRevenue.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-pink-50 p-3 rounded">
+                          <div className="text-pink-900">Accounts Receivable</div>
+                          <div className="text-lg font-semibold text-pink-700">${totalAR.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded">
+                          <div className="text-gray-900">Open To-Dos</div>
+                          <div className="text-lg font-semibold text-gray-700">{openTodos}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         );
       case 'reports':
@@ -674,30 +754,35 @@ function SuperAdminDashboard() {
 
     }
 
-    // Handle provider-year content
-    if (activeTab.includes('provider-') && activeTab.includes('-year-')) {
+    // Handle provider content (default to current year if no explicit year)
+    if (activeTab.includes('provider-')) {
       // Extract provider ID and year properly
-      // Format: provider-{providerId}-year-{YYYY}
+      // Possible formats:
+      //   provider-{providerId}
+      //   provider-{providerId}-year-{YYYY}
       const parts = activeTab.split('-');
-      console.log('Provider-month activeTab parts:', parts);
+      console.log('Provider activeTab parts:', parts);
       
-      // Find where the provider ID ends and month begins
-      // Provider ID is a UUID, so we need to find the pattern: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
       let providerId = '';
-      let year = '';
+      let year = String(currentYear);
       
       if (parts.length >= 6) {
         // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-        // So parts[1] to parts[5] should be the UUID parts
-        const uuidParts = parts.slice(1, 6); // Get parts 1-5 for UUID
+        const uuidParts = parts.slice(1, 6);
         providerId = uuidParts.join('-');
-        year = parts.slice(6).join('-').replace('year-', '');
+        if (activeTab.includes('-year-')) {
+          year = parts.slice(6).join('-').replace('year-', '');
+        }
       } else {
         // Fallback: try to extract from the end
-        const lastDashIndex = activeTab.lastIndexOf('-');
-        const beforeLastDash = activeTab.substring(0, lastDashIndex);
-        providerId = beforeLastDash.replace('provider-', '');
-        year = activeTab.substring(lastDashIndex + 1).replace('year-', '');
+        if (activeTab.includes('-year-')) {
+          const lastDashIndex = activeTab.lastIndexOf('-');
+          const beforeLastDash = activeTab.substring(0, lastDashIndex);
+          providerId = beforeLastDash.replace('provider-', '');
+          year = activeTab.substring(lastDashIndex + 1).replace('year-', '');
+        } else {
+          providerId = activeTab.replace('provider-', '');
+        }
       }
       
       console.log('Looking for provider with ID:', providerId);
@@ -713,8 +798,12 @@ function SuperAdminDashboard() {
         );
       }
 
-      // Calculate totals across all months for this provider (unchanged)
-      const providerBillingEntries = billingEntries.filter(entry => entry.providerId === providerId);
+      // Calculate totals for this provider scoped to the selected year
+      const providerBillingEntries = billingEntries.filter(entry => {
+        if (entry.providerId !== providerId) return false;
+        const entryYear = new Date(entry.date).getFullYear();
+        return String(entryYear) === String(year);
+      });
       const totalRevenue = providerBillingEntries
         .filter(entry => entry.status === 'paid')
         .reduce((sum, entry) => sum + entry.amount, 0);

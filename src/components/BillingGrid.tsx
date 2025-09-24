@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { DollarSign } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, GridApi, GridOptions, RowSelectedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import { ColDef, ColGroupDef, GridApi, GridOptions, RowSelectedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { supabase } from '../lib/supabase';
@@ -36,6 +37,10 @@ type Entry = {
   payment_amount?: number | null;
   payment_status?: string | null;
   month_tag?: string | null;
+  // Optional admin fields when available
+  insurance?: string | null;
+  copay?: number | null;
+  coinsurance?: number | null;
 };
 
 const NUMBER_COLS = new Set(['amount', 'insurance_payment', 'payment_amount', 'copay', 'coinsurance']);
@@ -45,6 +50,8 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   const [rowData, setRowData] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(false);
   const [billingCodes, setBillingCodes] = useState<string[]>([]);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [highlightedRowIds, setHighlightedRowIds] = useState<Set<string>>(new Set());
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [bulkDate, setBulkDate] = useState<string>('');
@@ -52,7 +59,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   const loadRows = async () => {
     setLoading(true);
     try {
-      let q = supabase.from('billing_entries').select('*').order('date', { ascending: false });
+      let q = supabase.from('billing_entries').select('*').order('date', { ascending: false }).limit(200);
       if (clinicId) q = q.eq('clinic_id', clinicId);
       if (providerId) q = q.eq('provider_id', providerId);
       if (dateRange?.start) q = q.gte('date', dateRange.start);
@@ -60,7 +67,34 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       const { data, error } = await q;
       if (error) throw error;
       const rows = (data as unknown as Entry[]) || [];
-      setRowData(rows);
+      // Pad with placeholders to always render 200 rows
+      const padded: Entry[] = rows.slice(0);
+      for (let i = rows.length; i < 200; i++) {
+        padded.push({
+          id: `placeholder-${i}`,
+          provider_id: providerId || '',
+          clinic_id: clinicId || '',
+          date: '',
+          patient_name: '',
+          procedure_code: '',
+          description: '',
+          amount: 0,
+          status: '',
+          claim_number: null,
+          notes: '',
+          appointment_status: '',
+          submit_info: '',
+          insurance_payment: null,
+          insurance_notes: '',
+          payment_amount: null,
+          payment_status: '',
+          month_tag: '',
+          insurance: null,
+          copay: null,
+          coinsurance: null
+        } as unknown as Entry);
+      }
+      setRowData(padded);
     } finally {
       setLoading(false);
     }
@@ -112,7 +146,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     return Number.isFinite(v) ? v : 0;
   };
 
-  const columnDefs: ColDef[] = useMemo(() => {
+  const columnDefs: Array<ColDef | ColGroupDef> = useMemo(() => {
     const defs: Array<[string, ColDef]> = [
       ['patient_name', { headerName: 'Patient Name', editable: !readOnly }],
       ['procedure_code', { headerName: 'Procedure Code', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: billingCodes } }],
@@ -187,7 +221,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       }}]
     ];
 
-    const cols = defs.map(([field, col]) => ({ field, ...col } as ColDef));
+    const baseCols = defs.map(([field, col]) => ({ field, ...col } as ColDef));
 
     if (visibleColumns && visibleColumns.length > 0) {
       const map: Record<string, string> = {
@@ -209,13 +243,49 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         Q: 'month_tag'
       };
       const keep = new Set(visibleColumns.map((c) => map[c] || c));
-      return cols.filter((c) => keep.has(String(c.field)));
+      return baseCols.filter((c) => keep.has(String((c as ColDef).field)));
     }
-    return cols;
-  }, [visibleColumns, readOnly]);
+    // Grouped headers to visually match the provided sheet example
+    const adminChildren: ColDef[] = [
+      { field: 'patient_name', headerName: 'Patient', headerClass: 'bg-sky-100' },
+      { field: 'insurance', headerName: 'Ins', headerClass: 'bg-sky-100', editable: !readOnly },
+      { field: 'copay', headerName: 'Co-pay', headerClass: 'bg-sky-100', editable: !readOnly, valueParser: numberParser },
+      { field: 'coinsurance', headerName: 'Co-ins', headerClass: 'bg-sky-100', editable: !readOnly, valueParser: numberParser },
+      { field: 'date', headerName: 'Date of Service', headerClass: 'bg-sky-100' }
+    ];
+    const providerChildren: ColDef[] = [
+      { field: 'procedure_code', headerName: 'CPT Code', headerClass: 'bg-orange-100', cellEditor: 'agSelectCellEditor', cellEditorParams: { values: billingCodes }, editable: !readOnly },
+      { field: 'appointment_status', headerName: 'Appt/Note Status', headerClass: 'bg-orange-100', editable: !readOnly }
+    ];
+    const billingChildren: ColDef[] = [
+      { field: 'status', headerName: 'Claim Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Claim Sent','RS','IP','Paid','Denial','Rejection','No Coverage','PP','Deductible','N/A','pending','approved','rejected'] } },
+      { field: 'submit_info', headerName: 'Most Recent Submit Date', headerClass: 'bg-green-100' },
+      { field: 'insurance_payment', headerName: 'Ins Pay', headerClass: 'bg-green-100', valueParser: numberParser },
+      { field: 'insurance_notes', headerName: 'Ins Pay Date', headerClass: 'bg-green-100' },
+      { field: 'description', headerName: 'PT RES', headerClass: 'bg-green-100' },
+      { field: 'payment_amount', headerName: 'Collected from PT', headerClass: 'bg-green-100', valueParser: numberParser },
+      { field: 'payment_status', headerName: 'PT Pay Status', headerClass: 'bg-green-100' },
+      { field: 'claim_number', headerName: 'PT Payment AR Ref Date', headerClass: 'bg-green-100' },
+      { field: 'amount', headerName: 'Total Pay', headerClass: 'bg-green-100', valueParser: numberParser },
+    ];
+    const notesChild: ColDef = { field: 'notes', headerName: 'Notes', headerClass: 'bg-purple-100', editable: !readOnly };
+
+    const grouped: Array<ColDef | ColGroupDef> = [
+      { headerName: 'ADMIN', marryChildren: true, headerClass: 'bg-sky-500 text-white', children: adminChildren },
+      { headerName: 'PROVIDER', marryChildren: true, headerClass: 'bg-orange-500 text-white', children: providerChildren },
+      { headerName: 'BILLING', marryChildren: true, headerClass: 'bg-green-600 text-white', children: billingChildren },
+      { headerName: '', marryChildren: true, headerClass: 'bg-purple-500 text-white', children: [notesChild] }
+    ];
+    return grouped;
+  }, [visibleColumns, readOnly, billingCodes]);
+
+  const rowClassRules = useMemo(() => ({
+    'bg-yellow-50': (params: any) => highlightedRowIds.has(params.data?.id)
+  }), [highlightedRowIds]);
 
   const onCellValueChanged: GridOptions['onCellValueChanged'] = async (e) => {
     if (!e.data || !e.colDef.field) return;
+    if (String((e.data as any).id || '').startsWith('placeholder-')) return;
     const field = String(e.colDef.field);
     const value = NUMBER_COLS.has(field) ? Number(e.newValue || 0) : e.newValue;
     const updates: Record<string, any> = { [field]: value };
@@ -253,13 +323,76 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         if (n.data && n.data.__ag_pasted__) dirty.push(n.data);
       });
       if (dirty.length === 0) return;
-      const updates = dirty.map((d) => ({ ...d }));
+      const updates = dirty.filter(d => !String(d.id || '').startsWith('placeholder-')).map((d) => ({ ...d }));
       for (const u of updates) {
         const { id, ...rest } = u as any;
         await supabase.from('billing_entries').update(rest).eq('id', id);
       }
       await loadRows();
     }, 50);
+  };
+
+  const addRowRelative = async (position: 'above' | 'below') => {
+    const api = gridApiRef.current;
+    const firstSelectedId = Array.from(selectedRowIds)[0];
+    const selected = rowData.find(r => r.id === firstSelectedId) || null;
+    const baseDate = selected?.date || null;
+    const { data: inserted } = await supabase
+      .from('billing_entries')
+      .insert({
+        clinic_id: clinicId || null,
+        provider_id: providerId || null,
+        date: baseDate,
+        patient_name: '',
+        procedure_code: '',
+        description: '',
+        amount: 0,
+        status: 'pending',
+        claim_number: null,
+        notes: null,
+      })
+      .select('*');
+    const newRow = (inserted && inserted[0]) as any;
+    if (!newRow) { await loadRows(); return; }
+    const idx = selected ? rowData.findIndex(r => r.id === selected.id) : 0;
+    const insertAt = Math.max(0, position === 'above' ? idx : idx + 1);
+    setRowData(prev => {
+      const clone = prev.slice(0);
+      clone.splice(insertAt, 0, newRow);
+      return clone.slice(0, 200);
+    });
+    setTimeout(() => {
+      api?.deselectAll();
+      setSelectedRowIds(new Set([newRow.id]));
+    }, 0);
+  };
+
+  const deleteSelectedRows = async () => {
+    if (selectedRowIds.size === 0) return;
+    const ids = Array.from(selectedRowIds);
+    await supabase.from('billing_entries').delete().in('id', ids);
+    await loadRows();
+    setSelectedRowIds(new Set());
+  };
+
+  const toggleHighlightSelected = () => {
+    if (selectedRowIds.size === 0) return;
+    setHighlightedRowIds(prev => {
+      const next = new Set(prev);
+      const ids = Array.from(selectedRowIds);
+      const shouldHighlight = ids.some(id => !next.has(id));
+      for (const id of ids) {
+        if (shouldHighlight) next.add(id); else next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const copySelection = () => {
+    const api = gridApiRef.current as any;
+    if (!api) return;
+    if (api.copySelectedRangeToClipboard) api.copySelectedRangeToClipboard();
+    else if (api.copySelectedRowsToClipboard) api.copySelectedRowsToClipboard();
   };
 
   const importXlsx = (file: File) => {
@@ -289,6 +422,13 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     reader.readAsArrayBuffer(file);
   };
 
+  const totals = useMemo(() => {
+    const insuranceCollected = rowData.reduce((sum, r) => sum + (Number(r.insurance_payment) || 0), 0);
+    const patientPayments = rowData.reduce((sum, r) => sum + (Number(r.payment_amount) || 0), 0);
+    const totalPayments = rowData.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    return { insuranceCollected, patientPayments, totalPayments };
+  }, [rowData]);
+
   return (
     <div className="space-y-3">
       {!readOnly && (
@@ -298,6 +438,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
             <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files && importXlsx(e.target.files[0])} />
           </label>
           <button className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700" onClick={() => { setShowBulk(true); setBulkDate(new Date().toISOString().split('T')[0]); }}>Paste Patient IDs</button>
+          <div className="mx-2 h-6 w-px bg-gray-300" />
           <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={async () => {
             const { data: inserted } = await supabase
               .from('billing_entries')
@@ -315,26 +456,59 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               })
               .select('*');
             if (inserted && inserted.length) {
-              setRowData((prev) => [inserted[0] as any, ...prev]);
+              setRowData((prev) => [inserted[0] as any, ...prev].slice(0, 200));
             } else {
               await loadRows();
             }
           }}>Add Row</button>
+          <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={() => addRowRelative('above')}>Add Row Above</button>
+          <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={() => addRowRelative('below')}>Add Row Below</button>
+          <button className="px-3 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200" onClick={deleteSelectedRows}>Delete Row(s)</button>
+          <div className="mx-2 h-6 w-px bg-gray-300" />
+          <button className="px-3 py-2 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200" onClick={toggleHighlightSelected}>Highlight</button>
+          <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={copySelection}>Copy</button>
+          <span className="text-xs text-gray-500">Paste with Ctrl+V</span>
         </div>
       )}
       <div className="ag-theme-alpine" style={{ height: 520, width: '100%' }}>
         <AgGridReact
           columnDefs={columnDefs}
           rowData={rowData}
+          rowClassRules={rowClassRules}
           undoRedoCellEditing={true}
           suppressClickEdit={false}
           readOnlyEdit={!!readOnly}
           onGridReady={(p) => { gridApiRef.current = p.api; }}
+          onSelectionChanged={(e) => {
+            const ids = new Set<string>();
+            e.api.getSelectedNodes().forEach(n => { if (n.data?.id) ids.add(n.data.id); });
+            setSelectedRowIds(ids);
+          }}
           onCellValueChanged={onCellValueChanged}
           onPasteEnd={onPaste}
           rowSelection={'multiple'}
           defaultColDef={{ resizable: true, sortable: true, filter: true, editable: !readOnly }}
         />
+      </div>
+      {/* Totals Footer */}
+      <div className="bg-white p-4 rounded-lg shadow flex items-center mt-3">
+        <div className="p-2 bg-green-100 rounded-lg">
+          <DollarSign className="h-6 w-6 text-green-600" />
+        </div>
+        <div className="ml-4 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+          <div>
+            <p className="text-sm font-medium text-gray-600">Insurance Payments</p>
+            <p className="text-xl font-bold text-gray-900">${totals.insuranceCollected.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-600">Patient Payments</p>
+            <p className="text-xl font-bold text-gray-900">${totals.patientPayments.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-600">Total Payment</p>
+            <p className="text-xl font-bold text-gray-900">${totals.totalPayments.toLocaleString()}</p>
+          </div>
+        </div>
       </div>
       {showBulk && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

@@ -30,8 +30,8 @@ function EnhancedBillingInterface({
 }: EnhancedBillingInterfaceProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useState<'single' | 'split'>('single');
-  const [activePanel, setActivePanel] = useState<'billing' | 'patients' | 'todo' | 'ar' | 'monthly-ar'>('billing');
+  const [viewMode, setViewMode] = useState<'single' | 'split'>('split');
+  const [activePanel, setActivePanel] = useState<'billing' | 'patients' | 'todo' | 'ar' | 'monthly-ar'>('todo');
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -247,93 +247,52 @@ function EnhancedBillingInterface({
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Panel */}
+          {/* Left Panel - Always Billing */}
+          <div className="bg-white rounded-lg shadow">
+            {renderBillingInterface()}
+          </div>
+
+          {/* Right Panel - Mirror side with To-Do and A/R only */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center space-x-4">
                 <button
-                  onClick={() => setActivePanel('billing')}
+                  onClick={() => setActivePanel('todo')}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
-                    activePanel === 'billing'
+                    activePanel === 'todo'
                       ? 'bg-purple-100 text-purple-700'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  <FileText size={16} />
-                  <span>Billing</span>
+                  <AlertCircle size={16} />
+                  <span>Billing To-Do</span>
                 </button>
                 <button
-                  onClick={() => setActivePanel('patients')}
+                  onClick={() => setActivePanel('ar')}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
-                    activePanel === 'patients'
+                    activePanel === 'ar'
                       ? 'bg-purple-100 text-purple-700'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  <Users size={16} />
-                  <span>Patients</span>
+                  <DollarSign size={16} />
+                  <span>A/R</span>
                 </button>
-                {(userRole === 'billing_staff' || userRole === 'admin' || userRole === 'super_admin') && (
-                  <>
-                    <button
-                      onClick={() => setActivePanel('todo')}
-                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
-                        activePanel === 'todo'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <AlertCircle size={16} />
-                      <span>To-Do</span>
-                    </button>
-                    <button
-                      onClick={() => setActivePanel('ar')}
-                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
-                        activePanel === 'ar'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <DollarSign size={16} />
-                      <span>A/R</span>
-                    </button>
-                    <button
-                      onClick={() => setActivePanel('monthly-ar')}
-                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium ${
-                        activePanel === 'monthly-ar'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      <Calendar size={16} />
-                      <span>Monthly A/R</span>
-                    </button>
-                  </>
-                )}
+                <div className="ml-auto">
+                  <button
+                    onClick={() => setViewMode('single')}
+                    className="flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100"
+                    title="Exit Split View"
+                  >
+                    <EyeOff size={16} />
+                    <span>Exit Split</span>
+                  </button>
+                </div>
               </div>
             </div>
-            <div className="p-6 h-96 overflow-y-auto">
-              {activePanel === 'billing' && renderBillingInterface()}
-              {activePanel === 'patients' && renderPatientDatabase()}
+            <div className="p-6 overflow-y-auto">
               {activePanel === 'todo' && renderTodoSystem()}
               {activePanel === 'ar' && renderAccountsReceivable()}
-              {activePanel === 'monthly-ar' && renderMonthlyAccountsReceivable()}
-            </div>
-          </div>
-
-          {/* Right Panel - Always Billing */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Billing Overview</h3>
-            </div>
-            <div className="p-6 h-96 overflow-y-auto">
-              <BillingGrid
-                providerId={providerId}
-                clinicId={clinicId}
-                readOnly={true}
-                visibleColumns={visibleColumns}
-                dateRange={computeSelectedMonthDateRange(selectedYear, selectedMonth)}
-              />
             </div>
           </div>
         </div>
