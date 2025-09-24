@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { 
-  ChevronUp, ChevronDown, Filter, Search, 
+  ChevronUp, ChevronDown, Search, 
   Edit3, Save, X, Plus, Trash2, Download, Upload
 } from 'lucide-react';
 import { formatDateMMDDYY, formatDateMMDD, formatDateToMonth, getMonthColor, parseDateInput } from '../utils/dateUtils';
@@ -8,7 +8,7 @@ import { formatDateMMDDYY, formatDateMMDD, formatDateToMonth, getMonthColor, par
 export interface ExcelColumn {
   id: string;
   label: string;
-  type: 'text' | 'number' | 'date' | 'select' | 'currency' | 'date-mmddyy' | 'date-mmd' | 'month';
+  type: 'text' | 'number' | 'date' | 'select' | 'multiselect' | 'currency' | 'date-mmddyy' | 'date-mmd' | 'month';
   width?: number;
   options?: string[];
   optionColors?: Record<string, string>; // tailwind class for display badge
@@ -139,8 +139,15 @@ function ExcelTable({
 
   const handleCellEdit = useCallback((rowId: string, columnId: string, currentValue: any) => {
     setEditingCell({ rowId, columnId });
-    setEditingValue(String(currentValue || ''));
-  }, []);
+    const column = columns.find(col => col.id === columnId);
+    if (column?.type === 'multiselect') {
+      // For multi-select, ensure we have a proper comma-separated string
+      const value = String(currentValue || '');
+      setEditingValue(value);
+    } else {
+      setEditingValue(String(currentValue || ''));
+    }
+  }, [columns]);
 
   const handleCellSave = useCallback(() => {
     if (!editingCell) return;
@@ -355,6 +362,34 @@ function ExcelTable({
                 <option key={option} value={option}>{option}</option>
               ))}
             </select>
+          ) : column.type === 'multiselect' ? (
+            <div className="w-full">
+              <select
+                multiple
+                value={Array.isArray(editingValue) ? editingValue : (editingValue ? editingValue.split(',') : [])}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions, option => option.value);
+                  setEditingValue(selected.join(','));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleCellSave();
+                  }
+                  if (e.key === 'Escape') {
+                    handleCellCancel();
+                  }
+                }}
+                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                autoFocus
+                size={Math.min(column.options?.length || 5, 8)}
+              >
+                {column.options?.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+              <div className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple, then press Enter</div>
+            </div>
           ) : (
             <input
               type={column.type === 'number' || column.type === 'currency' ? 'number' : 
@@ -423,6 +458,18 @@ function ExcelTable({
           badge(displayValue, getMonthColor(displayValue))
         ) : column.type === 'select' && displayValue ? (
           badge(displayValue, column.optionColors?.[displayValue] || 'bg-gray-100 text-gray-800')
+        ) : column.type === 'multiselect' ? (
+          displayValue && displayValue.trim() ? (
+            <div className="flex flex-wrap gap-1">
+              {displayValue.split(',').filter(item => item.trim()).map((item, index) => (
+                <span key={index} className={`px-2 py-1 rounded text-xs ${column.optionColors?.[item.trim()] || 'bg-gray-100 text-gray-800'}`}>
+                  {item.trim()}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400 italic">No codes selected</span>
+          )
         ) : (
           <span className="text-sm">{displayValue}</span>
         )}
@@ -476,13 +523,15 @@ function ExcelTable({
                     <Plus size={14} />
                     <span>Add Row</span>
                   </button>
-                  <button
-                    onClick={handleBulkImport}
-                    className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors"
-                  >
-                    <Upload size={14} />
-                    <span>Bulk Import</span>
-                  </button>
+                  {canImport && (
+                    <button
+                      onClick={handleBulkImport}
+                      className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors"
+                    >
+                      <Upload size={14} />
+                      <span>Bulk Import</span>
+                    </button>
+                  )}
                 </>
               )}
               

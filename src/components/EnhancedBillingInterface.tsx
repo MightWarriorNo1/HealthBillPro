@@ -39,16 +39,23 @@ function EnhancedBillingInterface({
   ];
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
-  // Listen for sidebar month selections
+  // Listen for sidebar month and year selections
   useEffect(() => {
     const handler = (e: any) => {
       if (e?.detail?.month) {
         setSelectedMonth(e.detail.month);
         setSelectedYear(e.detail.year || new Date().getFullYear());
       }
+      if (e?.detail?.year && !e?.detail?.month) {
+        setSelectedYear(e.detail.year);
+      }
     };
     window.addEventListener('billing:select-month', handler as EventListener);
-    return () => window.removeEventListener('billing:select-month', handler as EventListener);
+    window.addEventListener('billing:select-year', handler as EventListener);
+    return () => {
+      window.removeEventListener('billing:select-month', handler as EventListener);
+      window.removeEventListener('billing:select-year', handler as EventListener);
+    };
   }, []);
 
   const getMonthColor = (monthIndex: number) => {
@@ -71,35 +78,59 @@ function EnhancedBillingInterface({
 
   const renderBillingInterface = () => (
     <div className="h-full">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Billing Data</h3>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setViewMode(viewMode === 'single' ? 'split' : 'single')}
-            className="flex items-center space-x-1 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            {viewMode === 'single' ? <Eye size={14} /> : <EyeOff size={14} />}
-            <span>{viewMode === 'single' ? 'Split View' : 'Single View'}</span>
-          </button>
+      <div className="mb-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Billing Data</h3>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setViewMode(viewMode === 'single' ? 'split' : 'single')}
+              className="flex items-center space-x-1 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+            >
+              {viewMode === 'single' ? <Eye size={14} /> : <EyeOff size={14} />}
+              <span>{viewMode === 'single' ? 'Split View' : 'Single View'}</span>
+            </button>
+          </div>
+        </div>
+        {/* Month pills header */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {months.map((name, idx) => {
+            const monthIndex = idx + 1;
+            const isActive = monthIndex === selectedMonth;
+            const color = getMonthColor(idx);
+            return (
+              <button
+                key={name}
+                onClick={() => setSelectedMonth(monthIndex)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border ${isActive ? 'text-white' : 'text-gray-800'}`}
+                style={{
+                  backgroundColor: isActive ? color : '#ffffff',
+                  borderColor: color,
+                }}
+                title={`${name} ${selectedYear}`}
+              >
+                {name}
+              </button>
+            );
+          })}
         </div>
       </div>
       {/* Tracker for current month (billing only, not A/R) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div className="bg-white p-4 rounded border">
-          <div className="text-sm text-gray-600">Claims Not Paid</div>
-          <div id="billing-tracker-claims" className="text-2xl font-bold">—</div>
+          <div className="text-sm text-black">Claims Not Paid</div>
+          <div id="billing-tracker-claims" className="text-2xl font-bold text-gray-800">—</div>
         </div>
         <div className="bg-white p-4 rounded border">
-          <div className="text-sm text-gray-600">Insurance Collected</div>
-          <div id="billing-tracker-ins" className="text-2xl font-bold">$0</div>
+          <div className="text-sm text-black">Insurance Collected</div>
+          <div id="billing-tracker-ins" className="text-2xl font-bold text-gray-800">$0</div>
         </div>
         <div className="bg-white p-4 rounded border">
-          <div className="text-sm text-gray-600">Patient Payments</div>
-          <div id="billing-tracker-pt" className="text-2xl font-bold">$0</div>
+          <div className="text-sm text-black">Patient Payments</div>
+          <div id="billing-tracker-pt" className="text-2xl font-bold text-gray-800">$0</div>
         </div>
         <div className="bg-white p-4 rounded border">
-          <div className="text-sm text-gray-600">Total Collected</div>
-          <div id="billing-tracker-total" className="text-2xl font-bold">$0</div>
+          <div className="text-sm text-black">Total Collected</div>
+          <div id="billing-tracker-total" className="text-2xl font-bold text-gray-800">$0</div>
         </div>
       </div>
       <BillingGrid

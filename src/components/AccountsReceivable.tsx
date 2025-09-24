@@ -724,7 +724,7 @@ function AccountsReceivable({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Add Provider Payment</h3>
+              <h3 className="text-lg font-semibold text-black">Add Provider Payment</h3>
               <button
                 onClick={() => setShowAddPayment(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -740,7 +740,7 @@ function AccountsReceivable({
                 <select
                   value={newPayment.description}
                   onChange={(e) => setNewPayment({ ...newPayment, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                 >
                   <option value="">Select Description</option>
                   {paymentDescriptions.map(desc => (
@@ -757,7 +757,7 @@ function AccountsReceivable({
                   step="0.01"
                   value={newPayment.amount}
                   onChange={(e) => setNewPayment({ ...newPayment, amount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   placeholder="0.00"
                 />
               </div>
@@ -768,7 +768,7 @@ function AccountsReceivable({
                 <textarea
                   value={newPayment.notes}
                   onChange={(e) => setNewPayment({ ...newPayment, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   rows={3}
                   placeholder="Additional notes..."
                 />

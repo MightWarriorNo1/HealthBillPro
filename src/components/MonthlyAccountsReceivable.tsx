@@ -334,7 +334,7 @@ function MonthlyAccountsReceivable({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Add Monthly AR Entry</h3>
+              <h3 className="text-lg font-semibold text-black">Add Monthly AR Entry</h3>
               <button
                 onClick={() => setShowAddEntry(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -349,7 +349,7 @@ function MonthlyAccountsReceivable({
                   type="text"
                   value={newEntry.patient_id}
                   onChange={(e) => setNewEntry({ ...newEntry, patient_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   placeholder="e.g., 3861"
                 />
               </div>
@@ -358,7 +358,7 @@ function MonthlyAccountsReceivable({
                 <select
                   value={newEntry.service_month}
                   onChange={(e) => setNewEntry({ ...newEntry, service_month: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                 >
                   <option value="">Select Service Month</option>
                   {getPreviousMonths().map(month => (
@@ -372,7 +372,7 @@ function MonthlyAccountsReceivable({
                   type="date"
                   value={newEntry.date}
                   onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                 />
               </div>
               <div>
@@ -382,7 +382,7 @@ function MonthlyAccountsReceivable({
                   step="0.01"
                   value={newEntry.amount}
                   onChange={(e) => setNewEntry({ ...newEntry, amount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   placeholder="0.00"
                 />
               </div>
@@ -391,7 +391,7 @@ function MonthlyAccountsReceivable({
                 <select
                   value={newEntry.type}
                   onChange={(e) => setNewEntry({ ...newEntry, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                 >
                   <option value="">Select Type</option>
                   {typeOptions.map(type => (
@@ -404,7 +404,7 @@ function MonthlyAccountsReceivable({
                 <textarea
                   value={newEntry.notes}
                   onChange={(e) => setNewEntry({ ...newEntry, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   rows={3}
                   placeholder="Additional notes..."
                 />

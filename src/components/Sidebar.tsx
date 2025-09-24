@@ -15,7 +15,8 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
   const { clinics, providers } = useData();
   const userClinic = clinics.find(c => c.id === user?.clinicId);
   const clinicProviders = providers.filter(p => p.clinicId === user?.clinicId);
-  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   return (
     <>
@@ -58,7 +59,7 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
                   <span className="truncate">{tab.label}</span>
                 </button>
 
-                {/* Hierarchy: Clinic > Providers > Months */}
+                {/* Hierarchy: Clinic > Providers > Years */}
                 {tab.id === 'schedules' && userClinic && (
                   <div className="ml-6 text-sm text-gray-700">
                     <div className="font-semibold mb-1">{userClinic.name}</div>
@@ -70,24 +71,19 @@ function Sidebar({ tabs, activeTab, onTabChange, isOpen = true, onClose }: Sideb
                             {p.name}
                           </summary>
                           <ul className="ml-5 mt-1 space-y-1">
-                            {months.map((m, idx) => (
+                            {years.map((year) => (
                               <li
-                                key={idx}
+                                key={year}
                                 className="text-gray-500 hover:text-gray-900 cursor-pointer"
                                 onClick={() => {
-                                  const year = new Date().getFullYear();
-                                  window.dispatchEvent(
-                                    new CustomEvent('billing:select-month', {
-                                      detail: { month: idx + 1, year }
-                                    })
-                                  );
+                                  window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year } }));
                                   // Only close sidebar on mobile devices
                                   if (onClose && window.innerWidth < 1024) {
                                     onClose();
                                   }
                                 }}
                               >
-                                {m}
+                                {year}
                               </li>
                             ))}
                           </ul>

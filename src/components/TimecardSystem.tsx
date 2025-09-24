@@ -548,7 +548,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Add Manual Entry</h3>
+              <h3 className="text-lg font-semibold text-black">Add Manual Entry</h3>
               <button
                 onClick={() => setShowAddEntry(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -566,7 +566,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
                     type="datetime-local"
                     value={newEntry.clock_in}
                     onChange={(e) => setNewEntry({ ...newEntry, clock_in: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   />
                 </div>
                 <div>
@@ -577,7 +577,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
                     type="datetime-local"
                     value={newEntry.clock_out}
                     onChange={(e) => setNewEntry({ ...newEntry, clock_out: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   />
                 </div>
               </div>
@@ -590,7 +590,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
                     type="datetime-local"
                     value={newEntry.break_start}
                     onChange={(e) => setNewEntry({ ...newEntry, break_start: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   />
                 </div>
                 <div>
@@ -601,7 +601,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
                     type="datetime-local"
                     value={newEntry.break_end}
                     onChange={(e) => setNewEntry({ ...newEntry, break_end: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   />
                 </div>
               </div>
@@ -614,7 +614,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
                   step="0.01"
                   value={newEntry.hourly_rate}
                   onChange={(e) => setNewEntry({ ...newEntry, hourly_rate: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   placeholder="0.00"
                 />
               </div>
@@ -625,7 +625,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
                 <textarea
                   value={newEntry.notes}
                   onChange={(e) => setNewEntry({ ...newEntry, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   rows={3}
                   placeholder="Additional notes..."
                 />

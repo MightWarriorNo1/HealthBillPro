@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Building2, Users, FileText, 
   Clock, BarChart3, Settings, ChevronRight,
-  UserCheck, Calendar, DollarSign, AlertCircle
+  UserCheck, Calendar, DollarSign, AlertCircle, Palette
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import Header from './Header';
 import BillingDataTable from './BillingDataTable';
 import PatientDatabase from './PatientDatabase';
+import EnhancedBillingInterface from './EnhancedBillingInterface';
 import TodoSystem from './TodoSystem';
 import TimecardSystem from './TimecardSystem';
 import ReportingSystem from './ReportingSystem';
@@ -45,12 +46,71 @@ function SuperAdminDashboard() {
     pendingTodos: 0,
     totalAccountsReceivable: 0
   });
+  const [boxColors, setBoxColors] = useState({
+    totalClinics: 'bg-blue-50',
+    totalProviders: 'bg-green-50',
+    totalPatients: 'bg-purple-50',
+    totalRevenue: 'bg-orange-50',
+    pendingClaims: 'bg-red-50',
+    pendingTodos: 'bg-yellow-50',
+    completedTodos: 'bg-indigo-50',
+    totalAccountsReceivable: 'bg-pink-50'
+  });
+  const [showColorPicker, setShowColorPicker] = useState(false);
 
-  const months = [
-    'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025', 
-    'May 2025', 'Jun 2025', 'Jul 2025', 'Aug 2025',
-    'Sep 2025', 'Oct 2025', 'Nov 2025', 'Dec 2025'
+  // Ensure EnhancedBillingInterface reflects selected year when a provider-year tab is active
+  useEffect(() => {
+    if (activeTab.includes('provider-') && activeTab.includes('-year-')) {
+      const yearStr = activeTab.split('-year-')[1];
+      const yearNum = parseInt(yearStr, 10);
+      if (!Number.isNaN(yearNum)) {
+        window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year: yearNum } }));
+      }
+    }
+  }, [activeTab]);
+
+  const colorOptions = [
+    { name: 'Blue', class: 'bg-blue-50', textClass: 'text-blue-900', valueClass: 'text-blue-600' },
+    { name: 'Green', class: 'bg-green-50', textClass: 'text-green-900', valueClass: 'text-green-600' },
+    { name: 'Purple', class: 'bg-purple-50', textClass: 'text-purple-900', valueClass: 'text-purple-600' },
+    { name: 'Orange', class: 'bg-orange-50', textClass: 'text-orange-900', valueClass: 'text-orange-600' },
+    { name: 'Red', class: 'bg-red-50', textClass: 'text-red-900', valueClass: 'text-red-600' },
+    { name: 'Yellow', class: 'bg-yellow-50', textClass: 'text-yellow-900', valueClass: 'text-yellow-600' },
+    { name: 'Indigo', class: 'bg-indigo-50', textClass: 'text-indigo-900', valueClass: 'text-indigo-600' },
+    { name: 'Pink', class: 'bg-pink-50', textClass: 'text-pink-900', valueClass: 'text-pink-600' },
+    { name: 'Teal', class: 'bg-teal-50', textClass: 'text-teal-900', valueClass: 'text-teal-600' },
+    { name: 'Cyan', class: 'bg-cyan-50', textClass: 'text-cyan-900', valueClass: 'text-cyan-600' }
   ];
+
+  // Helper function to get text colors for a given background color
+  const getTextColors = (bgClass: string) => {
+    const colorMap: Record<string, { textClass: string; valueClass: string }> = {
+      'bg-blue-50': { textClass: 'text-blue-900', valueClass: 'text-blue-600' },
+      'bg-green-50': { textClass: 'text-green-900', valueClass: 'text-green-600' },
+      'bg-purple-50': { textClass: 'text-purple-900', valueClass: 'text-purple-600' },
+      'bg-orange-50': { textClass: 'text-orange-900', valueClass: 'text-orange-600' },
+      'bg-red-50': { textClass: 'text-red-900', valueClass: 'text-red-600' },
+      'bg-yellow-50': { textClass: 'text-yellow-900', valueClass: 'text-yellow-600' },
+      'bg-indigo-50': { textClass: 'text-indigo-900', valueClass: 'text-indigo-600' },
+      'bg-pink-50': { textClass: 'text-pink-900', valueClass: 'text-pink-600' },
+      'bg-teal-50': { textClass: 'text-teal-900', valueClass: 'text-teal-600' },
+      'bg-cyan-50': { textClass: 'text-cyan-900', valueClass: 'text-cyan-600' }
+    };
+    return colorMap[bgClass] || { textClass: 'text-gray-900', valueClass: 'text-gray-600' };
+  };
+
+  const updateBoxColor = (boxKey: string, colorClass: string) => {
+    setBoxColors(prev => ({
+      ...prev,
+      [boxKey]: colorClass
+    }));
+    // Don't close the color picker automatically - let users make multiple changes
+    // setShowColorPicker(false);
+    // setSelectedBox(null);
+  };
+
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   // Calculate statistics
   useEffect(() => {
@@ -93,9 +153,9 @@ function SuperAdminDashboard() {
                 id: `provider-${provider.id}`,
                 label: provider.name,
                 icon: UserCheck,
-                children: months.map(month => ({
-                  id: `provider-${provider.id}-${month.toLowerCase().replace(' ', '-')}`,
-                  label: month,
+                children: years.map(y => ({
+                  id: `provider-${provider.id}-year-${y}`,
+                  label: `${y}`,
                   icon: Calendar
                 }))
               }))
@@ -159,21 +219,17 @@ function SuperAdminDashboard() {
             } else {
               setActiveTab(item.id);
               if (item.id.includes('provider-') && item.id.includes('-')) {
-                // Extract provider ID properly for provider-month items
+                // Extract provider ID properly for provider-year items
                 const parts = item.id.split('-');
                 let providerId = '';
-                
                 if (parts.length >= 6) {
-                  // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-                  const uuidParts = parts.slice(1, 6); // Get parts 1-5 for UUID
+                  const uuidParts = parts.slice(1, 6);
                   providerId = uuidParts.join('-');
                 } else {
-                  // Fallback: try to extract from the end
                   const lastDashIndex = item.id.lastIndexOf('-');
                   const beforeLastDash = item.id.substring(0, lastDashIndex);
                   providerId = beforeLastDash.replace('provider-', '');
                 }
-                
                 setSelectedProvider(`provider-${providerId}`);
               } else if (item.id.includes('clinic-') && (item.id.includes('-patients') || item.id.includes('-todo'))) {
                 // Handle clinic sub-items (Patient Info, Billing To-Do)
@@ -281,39 +337,132 @@ function SuperAdminDashboard() {
         return (
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Super Admin Dashboard</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900">Total Clinics</h4>
-                  <p className="text-2xl font-bold text-blue-600">{clinics.length}</p>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Super Admin Dashboard</h3>
+                <button
+                  onClick={() => setShowColorPicker(!showColorPicker)}
+                  className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <Palette size={16} />
+                  <span>Customize Colors</span>
+                </button>
+              </div>
+              
+              {showColorPicker && (
+                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-medium text-gray-700">Choose colors for tracker boxes:</h4>
+                    <button
+                      onClick={() => setShowColorPicker(false)}
+                      className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 transition-colors"
+                    >
+                      Done
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {Object.entries(boxColors).map(([key, currentColor]) => (
+                      <div key={key} className="space-y-2">
+                        <label className="text-xs font-medium text-gray-600 capitalize">
+                          {key.replace(/([A-Z])/g, ' $1').trim()}
+                        </label>
+                        <div className="flex flex-wrap gap-1">
+                          {colorOptions.map(color => (
+                            <button
+                              key={color.name}
+                              onClick={() => updateBoxColor(key, color.class)}
+                              className={`w-6 h-6 rounded ${color.class} border-2 ${
+                                currentColor === color.class ? 'border-gray-800' : 'border-gray-300'
+                              } hover:scale-110 transition-transform`}
+                              title={color.name}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-green-900">Total Providers</h4>
-                  <p className="text-2xl font-bold text-green-600">{providers.length}</p>
+              )}
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                <div className={`${boxColors.totalClinics} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.totalClinics).textClass}`}>Total Clinics</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.totalClinics).valueClass}`}>{clinics.length}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
                 </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-purple-900">Total Patients</h4>
-                  <p className="text-2xl font-bold text-purple-600">{patients.length}</p>
+                <div className={`${boxColors.totalProviders} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.totalProviders).textClass}`}>Total Providers</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.totalProviders).valueClass}`}>{providers.length}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
                 </div>
-                <div className="bg-orange-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-orange-900">Total Revenue</h4>
-                  <p className="text-2xl font-bold text-orange-600">${stats.totalRevenue.toLocaleString()}</p>
+                <div className={`${boxColors.totalPatients} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.totalPatients).textClass}`}>Total Patients</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.totalPatients).valueClass}`}>{patients.length}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
                 </div>
-                <div className="bg-red-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-red-900">Pending Claims</h4>
-                  <p className="text-2xl font-bold text-red-600">{stats.pendingClaims}</p>
+                <div className={`${boxColors.totalRevenue} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.totalRevenue).textClass}`}>Total Revenue</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.totalRevenue).valueClass}`}>${stats.totalRevenue.toLocaleString()}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
                 </div>
-                <div className="bg-yellow-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-yellow-900">Pending Todos</h4>
-                  <p className="text-2xl font-bold text-yellow-600">{stats.pendingTodos}</p>
+                <div className={`${boxColors.pendingClaims} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.pendingClaims).textClass}`}>Pending Claims</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.pendingClaims).valueClass}`}>{stats.pendingClaims}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
                 </div>
-                <div className="bg-indigo-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-indigo-900">Completed Todos</h4>
-                  <p className="text-2xl font-bold text-indigo-600">{stats.completedTodos}</p>
+                <div className={`${boxColors.pendingTodos} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.pendingTodos).textClass}`}>Pending Todos</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.pendingTodos).valueClass}`}>{stats.pendingTodos}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
                 </div>
-                <div className="bg-pink-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-pink-900">Accounts Receivable</h4>
-                  <p className="text-2xl font-bold text-pink-600">${stats.totalAccountsReceivable.toLocaleString()}</p>
+                <div className={`${boxColors.completedTodos} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.completedTodos).textClass}`}>Completed Todos</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.completedTodos).valueClass}`}>{stats.completedTodos}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
+                </div>
+                <div className={`${boxColors.totalAccountsReceivable} p-3 rounded-lg relative group`}>
+                  <h4 className={`font-medium text-sm ${getTextColors(boxColors.totalAccountsReceivable).textClass}`}>Accounts Receivable</h4>
+                  <p className={`text-xl font-bold ${getTextColors(boxColors.totalAccountsReceivable).valueClass}`}>${stats.totalAccountsReceivable.toLocaleString()}</p>
+                  <button
+                    onClick={() => setShowColorPicker(true)}
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <Palette size={12} />
+                  </button>
                 </div>
               </div>
             </div>
@@ -479,22 +628,22 @@ function SuperAdminDashboard() {
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{clinic.name} - Overview</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900">Providers</h4>
-                  <p className="text-2xl font-bold text-blue-600">{clinicProviders.length}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-blue-900 text-sm">Providers</h4>
+                  <p className="text-xl font-bold text-blue-600">{clinicProviders.length}</p>
                 </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-green-900">Patients</h4>
-                  <p className="text-2xl font-bold text-green-600">{clinicPatients.length}</p>
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-green-900 text-sm">Patients</h4>
+                  <p className="text-xl font-bold text-green-600">{clinicPatients.length}</p>
                 </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-purple-900">Billing Entries</h4>
-                  <p className="text-2xl font-bold text-purple-600">{clinicBillingEntries.length}</p>
+                <div className="bg-purple-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-purple-900 text-sm">Billing Entries</h4>
+                  <p className="text-xl font-bold text-purple-600">{clinicBillingEntries.length}</p>
                 </div>
-                <div className="bg-orange-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-orange-900">Todo Items</h4>
-                  <p className="text-2xl font-bold text-orange-600">{clinicTodos.length}</p>
+                <div className="bg-orange-50 p-3 rounded-lg">
+                  <h4 className="font-medium text-orange-900 text-sm">Todo Items</h4>
+                  <p className="text-xl font-bold text-orange-600">{clinicTodos.length}</p>
                 </div>
               </div>
             </div>
@@ -525,34 +674,34 @@ function SuperAdminDashboard() {
 
     }
 
-    // Handle provider-month content
-    if (activeTab.includes('provider-') && activeTab.includes('-')) {
-      // Extract provider ID and month properly
-      // Format: provider-{providerId}-{month}
+    // Handle provider-year content
+    if (activeTab.includes('provider-') && activeTab.includes('-year-')) {
+      // Extract provider ID and year properly
+      // Format: provider-{providerId}-year-{YYYY}
       const parts = activeTab.split('-');
       console.log('Provider-month activeTab parts:', parts);
       
       // Find where the provider ID ends and month begins
       // Provider ID is a UUID, so we need to find the pattern: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
       let providerId = '';
-      let month = '';
+      let year = '';
       
       if (parts.length >= 6) {
         // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
         // So parts[1] to parts[5] should be the UUID parts
         const uuidParts = parts.slice(1, 6); // Get parts 1-5 for UUID
         providerId = uuidParts.join('-');
-        month = parts.slice(6).join('-').replace(/-/g, ' '); // Join remaining parts for month
+        year = parts.slice(6).join('-').replace('year-', '');
       } else {
         // Fallback: try to extract from the end
         const lastDashIndex = activeTab.lastIndexOf('-');
         const beforeLastDash = activeTab.substring(0, lastDashIndex);
         providerId = beforeLastDash.replace('provider-', '');
-        month = activeTab.substring(lastDashIndex + 1).replace(/-/g, ' ');
+        year = activeTab.substring(lastDashIndex + 1).replace('year-', '');
       }
       
       console.log('Looking for provider with ID:', providerId);
-      console.log('Month:', month);
+      console.log('Year:', year);
       const provider = providers.find(p => p.id === providerId);
       
       if (!provider) {
@@ -564,22 +713,131 @@ function SuperAdminDashboard() {
         );
       }
 
+      // Calculate totals across all months for this provider (unchanged)
+      const providerBillingEntries = billingEntries.filter(entry => entry.providerId === providerId);
+      const totalRevenue = providerBillingEntries
+        .filter(entry => entry.status === 'paid')
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const totalPendingClaims = providerBillingEntries.filter(entry => entry.status === 'pending').length;
+      const totalCompletedTodos = todoItems.filter(item => item.clinicId === provider.clinicId && item.status === 'completed').length;
+      const totalPendingTodos = todoItems.filter(item => item.clinicId === provider.clinicId && item.status === 'waiting').length;
+      
+      // Additional comprehensive metrics
+      const totalBillingEntries = providerBillingEntries.length;
+      const totalPaidClaims = providerBillingEntries.filter(entry => entry.status === 'paid').length;
+      const totalApprovedClaims = providerBillingEntries.filter(entry => entry.status === 'approved').length;
+      const totalRejectedClaims = providerBillingEntries.filter(entry => entry.status === 'rejected').length;
+      
+      // Calculate billing efficiency metrics
+      const billingEfficiency = totalBillingEntries > 0 ? Math.round((totalPaidClaims / totalBillingEntries) * 100) : 0;
+      const averageRevenuePerClaim = totalPaidClaims > 0 ? Math.round(totalRevenue / totalPaidClaims) : 0;
+      
+      // Get unique patient count for this provider
+      const providerPatients = patients.filter(patient => patient.clinicId === provider.clinicId);
+      const uniquePatientCount = providerPatients.length;
+
       return (
         <div className="space-y-6">
+          {/* Provider Total Tracker */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{provider.name} - Comprehensive Overview</h3>
+            
+            {/* Revenue & Financial Metrics */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Financial Performance</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-500">
+                  <h5 className="font-medium text-green-900 text-sm">Total Revenue</h5>
+                  <p className="text-xl font-bold text-green-600">${totalRevenue.toLocaleString()}</p>
+                  <p className="text-xs text-green-700">All months combined</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
+                  <h5 className="font-medium text-blue-900 text-sm">Avg Revenue/Claim</h5>
+                  <p className="text-xl font-bold text-blue-600">${averageRevenuePerClaim.toLocaleString()}</p>
+                  <p className="text-xs text-blue-700">Per paid claim</p>
+                </div>
+                <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-500">
+                  <h5 className="font-medium text-purple-900 text-sm">Billing Efficiency</h5>
+                  <p className="text-xl font-bold text-purple-600">{billingEfficiency}%</p>
+                  <p className="text-xs text-purple-700">Paid vs total claims</p>
+                </div>
+                <div className="bg-indigo-50 p-3 rounded-lg border-l-4 border-indigo-500">
+                  <h5 className="font-medium text-indigo-900 text-sm">Total Claims</h5>
+                  <p className="text-xl font-bold text-indigo-600">{totalBillingEntries}</p>
+                  <p className="text-xs text-indigo-700">All time entries</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Claims Status Breakdown */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Claims Status Overview</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-green-900 text-sm">Paid Claims</h5>
+                  <p className="text-lg font-bold text-green-600">{totalPaidClaims}</p>
+                </div>
+                <div className="bg-yellow-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-yellow-900 text-sm">Pending Claims</h5>
+                  <p className="text-lg font-bold text-yellow-600">{totalPendingClaims}</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-blue-900 text-sm">Approved Claims</h5>
+                  <p className="text-lg font-bold text-blue-600">{totalApprovedClaims}</p>
+                </div>
+                <div className="bg-red-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-red-900 text-sm">Rejected Claims</h5>
+                  <p className="text-lg font-bold text-red-600">{totalRejectedClaims}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Task & Patient Metrics */}
+            <div className="mb-4">
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Tasks & Patient Management</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-blue-900 text-sm">Total Patients</h5>
+                  <p className="text-xl font-bold text-blue-600">{uniquePatientCount}</p>
+                  <p className="text-xs text-blue-700">Unique patients</p>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-green-900 text-sm">Completed Tasks</h5>
+                  <p className="text-xl font-bold text-green-600">{totalCompletedTodos}</p>
+                  <p className="text-xs text-green-700">All time</p>
+                </div>
+                <div className="bg-yellow-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-yellow-900 text-sm">Pending Tasks</h5>
+                  <p className="text-xl font-bold text-yellow-600">{totalPendingTodos}</p>
+                  <p className="text-xs text-yellow-700">Awaiting completion</p>
+                </div>
+                <div className="bg-purple-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-purple-900 text-sm">Task Completion Rate</h5>
+                  <p className="text-xl font-bold text-purple-600">
+                    {totalCompletedTodos + totalPendingTodos > 0 
+                      ? Math.round((totalCompletedTodos / (totalCompletedTodos + totalPendingTodos)) * 100) 
+                      : 0}%
+                  </p>
+                  <p className="text-xs text-purple-700">Completed vs total</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Billing for selected year with month pills in header */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
-                {provider.name} - {month} Billing
+                {provider.name} - {year} Billing
               </h3>
               <p className="text-sm text-gray-600">
-                Manage billing entries for {provider.name} in {month}
+                Select a month in the header of the billing sheet for {year}
               </p>
             </div>
             <div className="p-6">
-              <BillingDataTable
+              <EnhancedBillingInterface
                 providerId={providerId}
                 clinicId={provider.clinicId}
-                month={month}
                 canEdit={true}
                 userRole="super_admin"
               />
@@ -601,8 +859,8 @@ function SuperAdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header 
-        title="Super Admin Dashboard" 
-        subtitle="Manage all clinics, providers, and system settings"
+        title="" 
+        subtitle=""
         onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         isMenuOpen={isSidebarOpen}
       />

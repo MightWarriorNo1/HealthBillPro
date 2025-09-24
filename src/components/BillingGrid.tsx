@@ -59,7 +59,8 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       if (dateRange?.end) q = q.lte('date', dateRange.end);
       const { data, error } = await q;
       if (error) throw error;
-      setRowData((data as unknown as Entry[]) || []);
+      const rows = (data as unknown as Entry[]) || [];
+      setRowData(rows);
     } finally {
       setLoading(false);
     }
@@ -252,7 +253,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         if (n.data && n.data.__ag_pasted__) dirty.push(n.data);
       });
       if (dirty.length === 0) return;
-      const updates = dirty.map((d) => ({ id: d.id, ...d }));
+      const updates = dirty.map((d) => ({ ...d }));
       for (const u of updates) {
         const { id, ...rest } = u as any;
         await supabase.from('billing_entries').update(rest).eq('id', id);
@@ -297,6 +298,28 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
             <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files && importXlsx(e.target.files[0])} />
           </label>
           <button className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700" onClick={() => { setShowBulk(true); setBulkDate(new Date().toISOString().split('T')[0]); }}>Paste Patient IDs</button>
+          <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={async () => {
+            const { data: inserted } = await supabase
+              .from('billing_entries')
+              .insert({
+                clinic_id: clinicId || null,
+                provider_id: providerId || null,
+                date: null,
+                patient_name: '',
+                procedure_code: '',
+                description: '',
+                amount: 0,
+                status: 'pending',
+                claim_number: null,
+                notes: null,
+              })
+              .select('*');
+            if (inserted && inserted.length) {
+              setRowData((prev) => [inserted[0] as any, ...prev]);
+            } else {
+              await loadRows();
+            }
+          }}>Add Row</button>
         </div>
       )}
       <div className="ag-theme-alpine" style={{ height: 520, width: '100%' }}>
@@ -305,7 +328,6 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           rowData={rowData}
           undoRedoCellEditing={true}
           suppressClickEdit={false}
-          clipboardPasteOnFocus={true}
           readOnlyEdit={!!readOnly}
           onGridReady={(p) => { gridApiRef.current = p.api; }}
           onCellValueChanged={onCellValueChanged}
@@ -317,14 +339,14 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       {showBulk && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-            <div className="text-lg font-semibold mb-2">Bulk Add by Patient IDs</div>
+            <div className="text-lg font-semibold mb-2 text-black">Bulk Add by Patient IDs</div>
             <div className="text-sm text-gray-600 mb-4">Paste 20-50 patient IDs (one per line). We'll auto-fill names and insurance and create rows.</div>
             <div className="grid grid-cols-1 gap-3 mb-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date of Service</label>
-                <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded" />
+                <input type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 text-black rounded" />
               </div>
-              <textarea className="w-full h-40 px-3 py-2 border border-gray-300 rounded" placeholder="3861\n4092\n..." value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
+              <textarea className="w-full h-40 px-3 py-2 border border-gray-300 text-black rounded" placeholder="3861\n4092\n..." value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
             </div>
             <div className="flex justify-end gap-2">
               <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => setShowBulk(false)}>Cancel</button>

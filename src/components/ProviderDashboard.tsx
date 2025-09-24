@@ -36,11 +36,8 @@ function ProviderDashboard() {
     totalRevenue: 0
   });
 
-  const months = [
-    'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025', 
-    'May 2025', 'Jun 2025', 'Jul 2025', 'Aug 2025',
-    'Sep 2025', 'Oct 2025', 'Nov 2025', 'Dec 2025'
-  ];
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   // Calculate provider-specific statistics
   useEffect(() => {
@@ -75,14 +72,10 @@ function ProviderDashboard() {
   const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     {
-      id: 'months',
-      label: 'Months',
+      id: 'years',
+      label: 'Years',
       icon: Calendar,
-      children: months.map(month => ({
-        id: `month-${month.toLowerCase().replace(' ', '-')}`,
-        label: month,
-        icon: Calendar
-      }))
+      children: years.map(y => ({ id: `year-${y}`, label: `${y}`, icon: Calendar }))
     }
   ];
 
@@ -100,18 +93,11 @@ function ProviderDashboard() {
               setSelectedMonth(selectedMonth === item.id ? null : item.id);
             } else {
               setActiveTab(item.id);
-              // When selecting a month item, dispatch month/year for the billing grid and keep submenu open
-              if (item.id.startsWith('month-')) {
-                const payload = item.id.replace('month-', ''); // e.g., jan-2025
-                const [monAbbr, yearStr] = payload.split('-');
-                const monthMap: Record<string, number> = {
-                  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
-                  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
-                };
-                const monthNum = monthMap[monAbbr as keyof typeof monthMap];
-                const yearNum = parseInt(yearStr, 10);
-                if (monthNum && yearNum) {
-                  window.dispatchEvent(new CustomEvent('billing:select-month', { detail: { month: monthNum, year: yearNum } }));
+              // When selecting a year item, dispatch to update header month pills
+              if (item.id.startsWith('year-')) {
+                const yearNum = parseInt(item.id.replace('year-', ''), 10);
+                if (yearNum) {
+                  window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year: yearNum } }));
                 }
               }
               // Keep submenu expanded by not changing selectedMonth here
