@@ -30,7 +30,7 @@ function EnhancedBillingInterface({
 }: EnhancedBillingInterfaceProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useState<'single' | 'split'>('split');
+  const [viewMode, setViewMode] = useState<'single' | 'split'>('single');
   const [activePanel, setActivePanel] = useState<'billing' | 'patients' | 'todo' | 'ar' | 'monthly-ar'>('todo');
 
   const months = [

@@ -41,9 +41,18 @@ type Entry = {
   insurance?: string | null;
   copay?: number | null;
   coinsurance?: number | null;
+  // New fields to match image structure
+  last_initial?: string | null;
+  // A/R fields
+  ar_name?: string | null;
+  ar_date_of_service?: string | null;
+  ar_amount?: number | null;
+  ar_date_recorded?: string | null;
+  ar_type?: string | null;
+  ar_notes?: string | null;
 };
 
-const NUMBER_COLS = new Set(['amount', 'insurance_payment', 'payment_amount', 'copay', 'coinsurance']);
+const NUMBER_COLS = new Set(['amount', 'insurance_payment', 'payment_amount', 'copay', 'coinsurance', 'ar_amount']);
 
 export default function BillingGrid({ clinicId, providerId, readOnly, visibleColumns, dateRange }: BillingGridProps) {
   const gridApiRef = useRef<GridApi | null>(null);
@@ -91,7 +100,14 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           month_tag: '',
           insurance: null,
           copay: null,
-          coinsurance: null
+          coinsurance: null,
+          last_initial: null,
+          ar_name: null,
+          ar_date_of_service: null,
+          ar_amount: null,
+          ar_date_recorded: null,
+          ar_type: null,
+          ar_notes: null
         } as unknown as Entry);
       }
       setRowData(padded);
@@ -272,36 +288,54 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       const keep = new Set(visibleColumns.map((c) => map[c] || c));
       return baseCols.filter((c) => keep.has(String((c as ColDef).field)));
     }
-    // Grouped headers to visually match the provided sheet example
+    // Grouped headers to match the exact structure from the image
     const adminChildren: ColDef[] = [
-      { field: 'patient_name', headerName: 'Patient', headerClass: 'bg-sky-100' },
-      { field: 'insurance', headerName: 'Ins', headerClass: 'bg-sky-100', editable: !readOnly },
-      { field: 'copay', headerName: 'Co-pay', headerClass: 'bg-sky-100', editable: !readOnly, valueParser: numberParser },
-      { field: 'coinsurance', headerName: 'Co-ins', headerClass: 'bg-sky-100', editable: !readOnly, valueParser: numberParser },
-      { field: 'date', headerName: 'Date of Service', headerClass: 'bg-sky-100' }
+      { field: 'id', headerName: 'ID', headerClass: 'bg-purple-100', editable: !readOnly },
+      { field: 'patient_name', headerName: 'First Name', headerClass: 'bg-purple-100', editable: !readOnly },
+      { field: 'last_initial', headerName: 'Last Initial', headerClass: 'bg-purple-100', editable: !readOnly },
+      { field: 'insurance', headerName: 'Ins', headerClass: 'bg-purple-100', editable: !readOnly },
+      { field: 'copay', headerName: 'Co-pay', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser },
+      { field: 'coinsurance', headerName: 'Co-ins', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser },
+      { field: 'date', headerName: 'Date of Service', headerClass: 'bg-purple-100', editable: !readOnly }
     ];
     const providerChildren: ColDef[] = [
       { field: 'procedure_code', headerName: 'CPT Code', headerClass: 'bg-orange-100', cellEditor: 'agSelectCellEditor', cellEditorParams: { values: billingCodes }, editable: !readOnly },
-      { field: 'appointment_status', headerName: 'Appt/Note Status', headerClass: 'bg-orange-100', editable: !readOnly }
+      { field: 'appointment_status', headerName: 'Appt Status', headerClass: 'bg-orange-100', editable: !readOnly }
     ];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
     const billingChildren: ColDef[] = [
       { field: 'status', headerName: 'Claim Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Claim Sent','RS','IP','Paid','Denial','Rejection','No Coverage','PP','Deductible','N/A','pending','approved','rejected'] } },
-      { field: 'submit_info', headerName: 'Most Recent Submit Date', headerClass: 'bg-green-100' },
-      { field: 'insurance_payment', headerName: 'Ins Pay', headerClass: 'bg-green-100', valueParser: numberParser },
-      { field: 'insurance_notes', headerName: 'Ins Pay Date', headerClass: 'bg-green-100' },
-      { field: 'description', headerName: 'PT RES', headerClass: 'bg-green-100' },
-      { field: 'payment_amount', headerName: 'Collected from PT', headerClass: 'bg-green-100', valueParser: numberParser },
-      { field: 'payment_status', headerName: 'PT Pay Status', headerClass: 'bg-green-100' },
-      { field: 'claim_number', headerName: 'PT Payment AR Ref Date', headerClass: 'bg-green-100' },
-      { field: 'amount', headerName: 'Total Pay', headerClass: 'bg-green-100', valueParser: numberParser },
+      { field: 'submit_info', headerName: 'Most Recent Submit Date', headerClass: 'bg-green-100', editable: !readOnly },
+      { field: 'insurance_payment', headerName: 'Ins Pay', headerClass: 'bg-green-100', valueParser: numberParser, editable: !readOnly },
+      { field: 'insurance_notes', headerName: 'Ins Pay Date', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
+      { field: 'description', headerName: 'PT RES', headerClass: 'bg-green-100', editable: !readOnly },
+      { field: 'payment_amount', headerName: 'Collected from PT', headerClass: 'bg-green-100', valueParser: numberParser, editable: !readOnly },
+      { field: 'payment_status', headerName: 'PT Pay Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Paid','CC declined','Secondary','Refunded','Payment Plan','Waiting on Claims',''] } },
+      { field: 'claim_number', headerName: 'PT Payment AR Ref Date', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
+      { field: 'amount', headerName: 'Total Pay', headerClass: 'bg-green-100', valueParser: numberParser, editable: !readOnly },
+      { field: 'notes', headerName: 'Notes', headerClass: 'bg-green-100', editable: !readOnly }
     ];
-    const notesChild: ColDef = { field: 'notes', headerName: 'Notes', headerClass: 'bg-purple-100', editable: !readOnly };
+    const arChildren: ColDef[] = [
+      { field: 'ar_name', headerName: 'Name', headerClass: 'bg-lime-100', editable: !readOnly },
+      { field: 'ar_date_of_service', headerName: 'Date of Service', headerClass: 'bg-lime-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
+      { field: 'ar_amount', headerName: 'Amount', headerClass: 'bg-lime-100', valueParser: numberParser, editable: !readOnly },
+      { field: 'ar_date_recorded', headerName: 'Date Recorded', headerClass: 'bg-lime-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
+      { field: 'ar_type', headerName: 'Type', headerClass: 'bg-lime-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Insurance Payment', 'Patient Payment', 'Refund', 'Adjustment', 'Other'] }, cellClass: 'ag-cell-with-arrow' },
+      { field: 'ar_notes', headerName: 'Notes', headerClass: 'bg-lime-100', editable: !readOnly }
+    ];
+    const blueChildren: ColDef[] = [
+      { field: 'description', headerName: 'Description', headerClass: 'bg-blue-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Service Fee', 'Consultation', 'Procedure', 'Follow-up', 'Other'] }, cellClass: 'ag-cell-with-arrow' },
+      { field: 'amount', headerName: 'Amount', headerClass: 'bg-blue-100', valueParser: numberParser, editable: !readOnly },
+      { field: 'notes', headerName: 'Notes', headerClass: 'bg-blue-100', editable: !readOnly }
+    ];
 
     const grouped: Array<ColDef | ColGroupDef> = [
-      { headerName: 'ADMIN', marryChildren: true, headerClass: 'bg-sky-500 text-white', children: adminChildren },
+      { headerName: 'ADMIN', marryChildren: true, headerClass: 'bg-purple-500 text-white', children: adminChildren },
       { headerName: 'PROVIDER', marryChildren: true, headerClass: 'bg-orange-500 text-white', children: providerChildren },
       { headerName: 'BILLING', marryChildren: true, headerClass: 'bg-green-600 text-white', children: billingChildren },
-      { headerName: '', marryChildren: true, headerClass: 'bg-purple-500 text-white', children: [notesChild] }
+      { headerName: 'ACCOUNTS RECEIVABLE', marryChildren: true, headerClass: 'bg-lime-500 text-white', children: arChildren },
+      { headerName: '', marryChildren: true, headerClass: 'bg-blue-500 text-white', children: blueChildren }
     ];
     return grouped;
   }, [visibleColumns, readOnly, billingCodes]);
@@ -377,6 +411,13 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         status: 'pending',
         claim_number: null,
         notes: null,
+        last_initial: null,
+        ar_name: null,
+        ar_date_of_service: null,
+        ar_amount: null,
+        ar_date_recorded: null,
+        ar_type: null,
+        ar_notes: null
       })
       .select('*');
     const newRow = (inserted && inserted[0]) as any;
@@ -480,6 +521,13 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
                 status: 'pending',
                 claim_number: null,
                 notes: null,
+                last_initial: null,
+                ar_name: null,
+                ar_date_of_service: null,
+                ar_amount: null,
+                ar_date_recorded: null,
+                ar_type: null,
+                ar_notes: null
               })
               .select('*');
             if (inserted && inserted.length) {
@@ -587,7 +635,14 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
                       insurance: p?.insurance || null,
                       copay: p?.copay ?? null,
                       coinsurance: p?.coinsurance ?? null,
-                      month_tag: new Date(bulkDate || Date.now()).toLocaleString('en-US', { month: 'short' })
+                      month_tag: new Date(bulkDate || Date.now()).toLocaleString('en-US', { month: 'short' }),
+                      last_initial: null,
+                      ar_name: null,
+                      ar_date_of_service: null,
+                      ar_amount: null,
+                      ar_date_recorded: null,
+                      ar_type: null,
+                      ar_notes: null
                     });
                   } catch {}
                 }
