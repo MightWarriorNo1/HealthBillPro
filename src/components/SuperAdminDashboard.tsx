@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Building2, Users, FileText, 
   Clock, BarChart3, Settings, ChevronRight,
-  UserCheck, DollarSign, AlertCircle, Palette
+  UserCheck, DollarSign, AlertCircle, Palette, Calendar
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
@@ -57,18 +57,14 @@ function SuperAdminDashboard() {
   });
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  // Ensure EnhancedBillingInterface reflects selected year when a provider tab is active
+  // Ensure EnhancedBillingInterface reflects selected year when a provider year tab is active
   useEffect(() => {
-    if (activeTab.includes('provider-')) {
-      let yearNum = currentYear;
-      if (activeTab.includes('-year-')) {
-        const yearStr = activeTab.split('-year-')[1];
-        const parsed = parseInt(yearStr, 10);
-        if (!Number.isNaN(parsed)) {
-          yearNum = parsed;
-        }
+    if (activeTab.includes('provider-') && activeTab.includes('-year-')) {
+      const yearStr = activeTab.split('-year-')[1];
+      const parsed = parseInt(yearStr, 10);
+      if (!Number.isNaN(parsed)) {
+        window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year: parsed } }));
       }
-      window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year: yearNum } }));
     }
   }, [activeTab]);
 
@@ -134,6 +130,8 @@ function SuperAdminDashboard() {
     });
   }, [billingEntries, todoItems, accountsReceivable]);
 
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
   const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     {
@@ -154,7 +152,15 @@ function SuperAdminDashboard() {
               .map(provider => ({
                 id: `provider-${provider.id}`,
                 label: provider.name,
-                icon: UserCheck
+                icon: UserCheck,
+                children: [
+                  { id: `provider-${provider.id}-dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+                  ...years.map(year => ({
+                    id: `provider-${provider.id}-year-${year}`,
+                    label: `${year}`,
+                    icon: Calendar
+                  }))
+                ]
               }))
           ]
         };
@@ -183,7 +189,8 @@ function SuperAdminDashboard() {
     const hasChildren = item.children && item.children.length > 0;
     const isExpanded = selectedClinic === item.id || selectedProvider === item.id || 
                       (item.id === 'clinics' && selectedClinic) || 
-                      (item.id === 'settings' && activeTab.startsWith('user-management'));
+                      (item.id === 'settings' && activeTab.startsWith('user-management')) ||
+                      (item.id.startsWith('provider-') && !item.id.includes('-year-') && !item.id.includes('-dashboard') && selectedProvider === item.id);
 
     return (
       <div key={item.id} className="space-y-1">
@@ -205,7 +212,8 @@ function SuperAdminDashboard() {
                 setSelectedClinic(selectedClinic === item.id ? null : item.id);
                 setSelectedProvider(null);
                 setActiveTab(item.id);
-              } else if (item.id.startsWith('provider-')) {
+              } else if (item.id.startsWith('provider-') && !item.id.includes('-year-') && !item.id.includes('-dashboard')) {
+                // This is a provider parent item - toggle its expansion
                 setSelectedProvider(selectedProvider === item.id ? null : item.id);
                 setActiveTab(item.id);
               } else {
@@ -215,7 +223,7 @@ function SuperAdminDashboard() {
               }
             } else {
               setActiveTab(item.id);
-              if (item.id.includes('provider-') && item.id.includes('-')) {
+              if (item.id.includes('provider-') && item.id.includes('-year-')) {
                 // Extract provider ID properly for provider-year items
                 const parts = item.id.split('-');
                 let providerId = '';
@@ -223,7 +231,20 @@ function SuperAdminDashboard() {
                   const uuidParts = parts.slice(1, 6);
                   providerId = uuidParts.join('-');
                 } else {
-                  const lastDashIndex = item.id.lastIndexOf('-');
+                  const lastDashIndex = item.id.lastIndexOf('-year-');
+                  const beforeLastDash = item.id.substring(0, lastDashIndex);
+                  providerId = beforeLastDash.replace('provider-', '');
+                }
+                setSelectedProvider(`provider-${providerId}`);
+              } else if (item.id.includes('provider-') && item.id.includes('-dashboard')) {
+                // Extract provider ID for provider dashboard
+                const parts = item.id.split('-');
+                let providerId = '';
+                if (parts.length >= 6) {
+                  const uuidParts = parts.slice(1, 6);
+                  providerId = uuidParts.join('-');
+                } else {
+                  const lastDashIndex = item.id.lastIndexOf('-dashboard');
                   const beforeLastDash = item.id.substring(0, lastDashIndex);
                   providerId = beforeLastDash.replace('provider-', '');
                 }
@@ -464,10 +485,10 @@ function SuperAdminDashboard() {
               </div>
             </div>
 
-            {/* Clinic Breakdowns */}
+            {/* Clinic Breakdowns - horizontal scroll */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Clinic Breakdowns</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="flex gap-4 overflow-x-auto pb-2">
                 {clinics.map(clinic => {
                   const clinicProviders = providers.filter(p => p.clinicId === clinic.id);
                   const clinicPatients = patients.filter(p => p.clinicId === clinic.id);
@@ -486,7 +507,7 @@ function SuperAdminDashboard() {
                   const openTodos = clinicTodos.filter(t => t.status === 'waiting' || t.status === 'in_progress' || t.status === 'ip' || t.status === 'on_hold').length;
 
                   return (
-                    <div key={clinic.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div key={clinic.id} className="min-w-[280px] border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-medium text-gray-900">{clinic.name}</h4>
                         <button
@@ -754,39 +775,20 @@ function SuperAdminDashboard() {
 
     }
 
-    // Handle provider content (default to current year if no explicit year)
-    if (activeTab.includes('provider-')) {
-      // Extract provider ID and year properly
-      // Possible formats:
-      //   provider-{providerId}
-      //   provider-{providerId}-year-{YYYY}
+    // Handle provider dashboard content
+    if (activeTab.includes('provider-') && activeTab.includes('-dashboard')) {
+      // Extract provider ID for provider dashboard
       const parts = activeTab.split('-');
-      console.log('Provider activeTab parts:', parts);
-      
       let providerId = '';
-      let year = String(currentYear);
-      
       if (parts.length >= 6) {
-        // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
         const uuidParts = parts.slice(1, 6);
         providerId = uuidParts.join('-');
-        if (activeTab.includes('-year-')) {
-          year = parts.slice(6).join('-').replace('year-', '');
-        }
       } else {
-        // Fallback: try to extract from the end
-        if (activeTab.includes('-year-')) {
-          const lastDashIndex = activeTab.lastIndexOf('-');
-          const beforeLastDash = activeTab.substring(0, lastDashIndex);
-          providerId = beforeLastDash.replace('provider-', '');
-          year = activeTab.substring(lastDashIndex + 1).replace('year-', '');
-        } else {
-          providerId = activeTab.replace('provider-', '');
-        }
+        const lastDashIndex = activeTab.lastIndexOf('-dashboard');
+        const beforeLastDash = activeTab.substring(0, lastDashIndex);
+        providerId = beforeLastDash.replace('provider-', '');
       }
       
-      console.log('Looking for provider with ID:', providerId);
-      console.log('Year:', year);
       const provider = providers.find(p => p.id === providerId);
       
       if (!provider) {
@@ -798,12 +800,8 @@ function SuperAdminDashboard() {
         );
       }
 
-      // Calculate totals for this provider scoped to the selected year
-      const providerBillingEntries = billingEntries.filter(entry => {
-        if (entry.providerId !== providerId) return false;
-        const entryYear = new Date(entry.date).getFullYear();
-        return String(entryYear) === String(year);
-      });
+      // Calculate totals for this provider (all time)
+      const providerBillingEntries = billingEntries.filter(entry => entry.providerId === providerId);
       const totalRevenue = providerBillingEntries
         .filter(entry => entry.status === 'paid')
         .reduce((sum, entry) => sum + entry.amount, 0);
@@ -827,18 +825,18 @@ function SuperAdminDashboard() {
 
       return (
         <div className="space-y-6">
-          {/* Provider Total Tracker */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{provider.name} - Comprehensive Overview</h3>
+          {/* Provider Dashboard */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{provider.name} - Dashboard</h3>
             
             {/* Revenue & Financial Metrics */}
             <div className="mb-6">
-              <h4 className="text-md font-semibold text-gray-800 mb-3">Financial Performance</h4>
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Financial Performance (All Time)</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-500">
                   <h5 className="font-medium text-green-900 text-sm">Total Revenue</h5>
                   <p className="text-xl font-bold text-green-600">${totalRevenue.toLocaleString()}</p>
-                  <p className="text-xs text-green-700">All months combined</p>
+                  <p className="text-xs text-green-700">All time</p>
                 </div>
                 <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
                   <h5 className="font-medium text-blue-900 text-sm">Avg Revenue/Claim</h5>
@@ -908,6 +906,128 @@ function SuperAdminDashboard() {
                       : 0}%
                   </p>
                   <p className="text-xs text-purple-700">Completed vs total</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Handle provider year-specific content
+    if (activeTab.includes('provider-') && activeTab.includes('-year-')) {
+      // Extract provider ID and year properly
+      const parts = activeTab.split('-');
+      console.log('Provider activeTab parts:', parts);
+      
+      let providerId = '';
+      let year = String(currentYear);
+      
+      if (parts.length >= 6) {
+        // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        const uuidParts = parts.slice(1, 6);
+        providerId = uuidParts.join('-');
+        if (activeTab.includes('-year-')) {
+          year = parts.slice(6).join('-').replace('year-', '');
+        }
+      } else {
+        // Fallback: try to extract from the end
+        if (activeTab.includes('-year-')) {
+          const lastDashIndex = activeTab.lastIndexOf('-year-');
+          const beforeLastDash = activeTab.substring(0, lastDashIndex);
+          providerId = beforeLastDash.replace('provider-', '');
+          year = activeTab.substring(lastDashIndex + 1).replace('year-', '');
+        } else {
+          providerId = activeTab.replace('provider-', '');
+        }
+      }
+      
+      console.log('Looking for provider with ID:', providerId);
+      console.log('Year:', year);
+      const provider = providers.find(p => p.id === providerId);
+      
+      if (!provider) {
+        return (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-red-900 mb-2">Provider Not Found</h3>
+            <p className="text-red-700">The selected provider could not be found.</p>
+          </div>
+        );
+      }
+
+      // Calculate totals for this provider scoped to the selected year
+      const providerBillingEntries = billingEntries.filter(entry => {
+        if (entry.providerId !== providerId) return false;
+        const entryYear = new Date(entry.date).getFullYear();
+        return String(entryYear) === String(year);
+      });
+      const totalRevenue = providerBillingEntries
+        .filter(entry => entry.status === 'paid')
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const totalPendingClaims = providerBillingEntries.filter(entry => entry.status === 'pending').length;
+      
+      // Additional comprehensive metrics
+      const totalBillingEntries = providerBillingEntries.length;
+      const totalPaidClaims = providerBillingEntries.filter(entry => entry.status === 'paid').length;
+      const totalApprovedClaims = providerBillingEntries.filter(entry => entry.status === 'approved').length;
+      const totalRejectedClaims = providerBillingEntries.filter(entry => entry.status === 'rejected').length;
+      
+      // Calculate billing efficiency metrics
+      const billingEfficiency = totalBillingEntries > 0 ? Math.round((totalPaidClaims / totalBillingEntries) * 100) : 0;
+      const averageRevenuePerClaim = totalPaidClaims > 0 ? Math.round(totalRevenue / totalPaidClaims) : 0;
+
+      return (
+        <div className="space-y-6">
+          {/* Provider Year Overview */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{provider.name} - {year} Overview</h3>
+            
+            {/* Revenue & Financial Metrics for the year */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Financial Performance ({year})</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-500">
+                  <h5 className="font-medium text-green-900 text-sm">Total Revenue</h5>
+                  <p className="text-xl font-bold text-green-600">${totalRevenue.toLocaleString()}</p>
+                  <p className="text-xs text-green-700">{year} only</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
+                  <h5 className="font-medium text-blue-900 text-sm">Avg Revenue/Claim</h5>
+                  <p className="text-xl font-bold text-blue-600">${averageRevenuePerClaim.toLocaleString()}</p>
+                  <p className="text-xs text-blue-700">Per paid claim</p>
+                </div>
+                <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-500">
+                  <h5 className="font-medium text-purple-900 text-sm">Billing Efficiency</h5>
+                  <p className="text-xl font-bold text-purple-600">{billingEfficiency}%</p>
+                  <p className="text-xs text-purple-700">Paid vs total claims</p>
+                </div>
+                <div className="bg-indigo-50 p-3 rounded-lg border-l-4 border-indigo-500">
+                  <h5 className="font-medium text-indigo-900 text-sm">Total Claims</h5>
+                  <p className="text-xl font-bold text-indigo-600">{totalBillingEntries}</p>
+                  <p className="text-xs text-indigo-700">{year} entries</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Claims Status Breakdown for the year */}
+            <div className="mb-6">
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Claims Status Overview ({year})</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-green-900 text-sm">Paid Claims</h5>
+                  <p className="text-lg font-bold text-green-600">{totalPaidClaims}</p>
+                </div>
+                <div className="bg-yellow-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-yellow-900 text-sm">Pending Claims</h5>
+                  <p className="text-lg font-bold text-yellow-600">{totalPendingClaims}</p>
+                </div>
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-blue-900 text-sm">Approved Claims</h5>
+                  <p className="text-lg font-bold text-blue-600">{totalApprovedClaims}</p>
+                </div>
+                <div className="bg-red-50 p-3 rounded-lg">
+                  <h5 className="font-medium text-red-900 text-sm">Rejected Claims</h5>
+                  <p className="text-lg font-bold text-red-600">{totalRejectedClaims}</p>
                 </div>
               </div>
             </div>

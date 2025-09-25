@@ -410,7 +410,7 @@ function BillingInterface({
 
     if (columnDef.type === 'select') {
       return (
-        <td className="px-6 py-4 whitespace-nowrap">
+        <td className="px-6 py-4 whitespace-nowrap border border-gray-300">
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${columnDef.key === 'payment_status' ? getPaymentStatusColor(String(value || '')) : getStatusColor(String(value || ''))}`}>
             {value as string || '-'}
           </span>
@@ -419,7 +419,7 @@ function BillingInterface({
     }
 
     return (
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">
         {columnDef.type === 'number' ? `$${(value as number)?.toFixed(2) || '0.00'}` :
         columnDef.type === 'date' ? new Date(value as string).toLocaleDateString() :
         (value as string) || '-'}
@@ -475,7 +475,7 @@ function BillingInterface({
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full sm:w-48 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent select-with-arrow"
             >
               <option value="all">All Status</option>
               {statusOptions.map(status => (
@@ -491,7 +491,7 @@ function BillingInterface({
       {/* Billing Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full border-collapse border border-gray-300">
             <thead className="bg-gray-50">
               <tr>
                 {visibleColumns.map(column => {
@@ -499,7 +499,7 @@ function BillingInterface({
                   if (!columnDef) return null;
                   
                   return (
-                    <th key={column} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th key={column} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                       <div className="flex items-center space-x-1">
                         <span>{columnDef.label}</span>
                       </div>
@@ -507,18 +507,18 @@ function BillingInterface({
                   );
                 })}
                 {canEdit && (
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Actions
                   </th>
                 )}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white">
               {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="hover:bg-gray-50">
                   {visibleColumns.map(column => renderCell(entry, column))}
                   {canEdit && (
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium border border-gray-300">
                       <div className="flex justify-end space-x-2">
                         <button
                           onClick={() => setEditingEntry(entry)}
@@ -571,7 +571,7 @@ function BillingInterface({
                       <select
                         value={newEntry[columnDef.key as keyof typeof newEntry] as string || ''}
                         onChange={(e) => setNewEntry({ ...newEntry, [columnDef.key]: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent select-with-arrow"
                       >
                         <option value="">Select...</option>
                         {(columnDef.key === 'procedure_code' ? billingCodeOptions.map(o => o.code) : (columnDef.options || [])).map(option => (

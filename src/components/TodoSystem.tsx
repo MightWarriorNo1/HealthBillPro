@@ -171,7 +171,7 @@ function TodoSystem({ clinicId, canEdit = true }: TodoSystemProps) {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
         >
           <option value="all">All Status</option>
           {statusOptions.map(status => (
@@ -294,7 +294,7 @@ function TodoSystem({ clinicId, canEdit = true }: TodoSystemProps) {
                 <select
                   value={newItem.status}
                   onChange={(e) => setNewItem({ ...newItem, status: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
                 >
                   <option value="">Select Status</option>
                   {statusOptions.map(status => (

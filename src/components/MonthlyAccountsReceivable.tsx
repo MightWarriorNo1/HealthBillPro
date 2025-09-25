@@ -270,7 +270,7 @@ function MonthlyAccountsReceivable({
         <select
           value={filterServiceMonth}
           onChange={(e) => setFilterServiceMonth(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
         >
           <option value="all">All Service Months</option>
           {getPreviousMonths().map(month => (
@@ -358,7 +358,7 @@ function MonthlyAccountsReceivable({
                 <select
                   value={newEntry.service_month}
                   onChange={(e) => setNewEntry({ ...newEntry, service_month: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black select-with-arrow"
                 >
                   <option value="">Select Service Month</option>
                   {getPreviousMonths().map(month => (
@@ -391,7 +391,7 @@ function MonthlyAccountsReceivable({
                 <select
                   value={newEntry.type}
                   onChange={(e) => setNewEntry({ ...newEntry, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black select-with-arrow"
                 >
                   <option value="">Select Type</option>
                   {typeOptions.map(type => (

@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Settings, Users, Shield, Palette, Eye, 
-  Save, Plus, Edit, Trash2, X, Key,
-  UserPlus, Mail, AlertCircle, CheckCircle
+  Plus, Edit, Trash2, X, Mail
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -39,6 +38,16 @@ interface AuditLog {
   created_at: string;
 }
 
+interface ClinicRecord {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 interface SuperAdminSettingsProps {
   userId?: string;
   initialTab?: 'users' | 'billing-codes' | 'clinic-management' | 'export-data' | 'audit-logs' | 'system-settings';
@@ -49,11 +58,14 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [billingCodes, setBillingCodes] = useState<BillingCode[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [clinics, setClinics] = useState<ClinicRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showAddCode, setShowAddCode] = useState(false);
+  const [showAddClinic, setShowAddClinic] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editingCode, setEditingCode] = useState<BillingCode | null>(null);
+  const [editingClinic, setEditingClinic] = useState<ClinicRecord | null>(null);
 
   const [newUser, setNewUser] = useState({
     email: '',
@@ -71,6 +83,14 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
     description: '',
     color: '#3B82F6'
   });
+
+  const [newClinic, setNewClinic] = useState<ClinicRecord>({
+    id: '',
+    name: '',
+    address: '',
+    phone: '',
+    email: ''
+  } as ClinicRecord);
 
   const tabs = [
     { id: 'users', label: 'User Management', icon: Users },
@@ -114,7 +134,7 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
           await loadBillingCodes();
           break;
         case 'clinic-management':
-          // No specific data loading needed for clinic management
+          await loadClinics();
           break;
         case 'export-data':
           // No specific data loading needed for export data
@@ -160,6 +180,20 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
     } catch (error) {
       console.error('Error loading billing codes:', error);
       toast.error('Failed to load billing codes');
+    }
+  };
+
+  const loadClinics = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clinics')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setClinics(data || []);
+    } catch (error) {
+      console.error('Error loading clinics:', error);
+      toast.error('Failed to load clinics');
     }
   };
 
@@ -332,7 +366,69 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
     }
   };
 
-  const sendUserInvite = async (userId: string) => {
+  const createClinic = async () => {
+    if (!newClinic.name) {
+      toast.error('Please provide a clinic name');
+      return;
+    }
+    try {
+      // Only send columns that exist in DB schema
+      const payload = {
+        id: newClinic.id || crypto.randomUUID(),
+        name: newClinic.name,
+        address: newClinic.address || null,
+        phone: newClinic.phone || null
+      } as any;
+      const { error } = await supabase.from('clinics').insert([payload]);
+      if (error) throw error;
+      toast.success('Clinic created successfully');
+      setShowAddClinic(false);
+      setNewClinic({ id: '', name: '', address: '', phone: '', email: '' } as any);
+      loadClinics();
+    } catch (error: any) {
+      console.error('Error creating clinic:', error);
+      toast.error(error.message || 'Failed to create clinic');
+    }
+  };
+
+  const updateClinic = async () => {
+    if (!editingClinic) return;
+    try {
+      const { error } = await supabase
+        .from('clinics')
+        .update({
+          name: editingClinic.name,
+          address: editingClinic.address,
+          phone: editingClinic.phone
+        })
+        .eq('id', editingClinic.id);
+      if (error) throw error;
+      toast.success('Clinic updated successfully');
+      setEditingClinic(null);
+      loadClinics();
+    } catch (error: any) {
+      console.error('Error updating clinic:', error);
+      toast.error(error.message || 'Failed to update clinic');
+    }
+  };
+
+  const deleteClinic = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this clinic?')) return;
+    try {
+      const { error } = await supabase
+        .from('clinics')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      toast.success('Clinic deleted successfully');
+      loadClinics();
+    } catch (error: any) {
+      console.error('Error deleting clinic:', error);
+      toast.error(error.message || 'Failed to delete clinic');
+    }
+  };
+
+  const sendUserInvite = async (_userId: string) => {
     try {
       // In a real implementation, you would send an email invite
       toast.success('Invite sent successfully');
@@ -704,60 +800,60 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">Clinic Management</h3>
-              <p className="text-sm text-gray-600">Manage clinic information and settings</p>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Clinic Management</h3>
+                <p className="text-sm text-gray-600">Add, edit, and remove clinics</p>
+              </div>
+              <button
+                onClick={() => { setEditingClinic(null); setShowAddClinic(true); }}
+                className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                <Plus size={16} />
+                <span>Add Clinic</span>
+              </button>
             </div>
 
-            <div className="bg-white rounded-lg shadow p-6">
-              <h4 className="text-md font-semibold text-gray-900 mb-4">Clinic Information</h4>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Clinic Name
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue="Main Clinic"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Address
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue="123 Medical St, City, State 12345"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Phone
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue="(555) 123-4567"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      defaultValue="info@clinic.com"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                    Save Changes
-                  </button>
-                </div>
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {clinics.map((clinic) => (
+                      <tr key={clinic.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{clinic.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{clinic.address || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{clinic.phone || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{clinic.email || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => { setEditingClinic(clinic); setShowAddClinic(true); }}
+                              className="text-indigo-600 hover:text-indigo-900"
+                              title="Edit Clinic"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => deleteClinic(clinic.id)}
+                              className="text-red-600 hover:text-red-900"
+                              title="Delete Clinic"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -878,7 +974,7 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => setActiveTab(tab.id as any)}
                   className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
                     activeTab === tab.id
                       ? 'border-purple-500 text-purple-600'
@@ -897,6 +993,78 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
         </div>
       </div>
 
+    {/* Add/Edit Clinic Modal */}
+    {showAddClinic && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-black">{editingClinic ? 'Edit Clinic' : 'Add Clinic'}</h3>
+            <button
+              onClick={() => { setShowAddClinic(false); setEditingClinic(null); }}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Clinic Name *</label>
+              <input
+                type="text"
+                value={editingClinic ? editingClinic.name : newClinic.name}
+                onChange={(e) => editingClinic ? setEditingClinic({ ...editingClinic, name: e.target.value }) : setNewClinic({ ...newClinic, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
+                placeholder="Clinic Name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+              <input
+                type="text"
+                value={editingClinic ? (editingClinic.address || '') : (newClinic.address || '')}
+                onChange={(e) => editingClinic ? setEditingClinic({ ...editingClinic, address: e.target.value }) : setNewClinic({ ...newClinic, address: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black "
+                placeholder="123 Medical St, City, State"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <input
+                type="text"
+                value={editingClinic ? (editingClinic.phone || '') : (newClinic.phone || '')}
+                onChange={(e) => editingClinic ? setEditingClinic({ ...editingClinic, phone: e.target.value }) : setNewClinic({ ...newClinic, phone: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black" 
+                placeholder="(555) 123-4567"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={editingClinic ? (editingClinic.email || '') : (newClinic.email || '')}
+                onChange={(e) => editingClinic ? setEditingClinic({ ...editingClinic, email: e.target.value }) : setNewClinic({ ...newClinic, email: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
+                placeholder="info@clinic.com"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-3 mt-6">
+            <button
+              onClick={() => { setShowAddClinic(false); setEditingClinic(null); }}
+              className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={editingClinic ? updateClinic : createClinic}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              {editingClinic ? 'Update Clinic' : 'Create Clinic'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
       {/* Add User Modal */}
       {showAddUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

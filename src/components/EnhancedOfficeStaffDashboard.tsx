@@ -361,7 +361,7 @@ function EnhancedOfficeStaffDashboard() {
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent select-with-arrow"
                   >
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
@@ -372,7 +372,7 @@ function EnhancedOfficeStaffDashboard() {
                   <select
                     value={selectedProvider}
                     onChange={(e) => setSelectedProvider(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent select-with-arrow"
                   >
                     <option value="all">All Providers</option>
                     {clinicProviders.map((provider) => (
@@ -383,34 +383,34 @@ function EnhancedOfficeStaffDashboard() {
 
                 <h2 className="text-lg font-semibold text-gray-900 mb-6">Billing Entries</h2>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
+                  <table className="min-w-full border-collapse border border-gray-300">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provider</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Provider</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Patient</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Code</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Amount</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white">
                       {filteredEntries.map((entry) => {
                         const provider = providers.find(p => p.id === entry.providerId);
                         return (
                           <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.date}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{provider?.name}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{entry.patientName}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">{entry.procedureCode}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">${entry.amount.toFixed(2)}</td>
-                            <td className="px-6 py-4 whitespace-nowrap">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">{entry.date}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">{provider?.name}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 border border-gray-300">{entry.patientName}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono border border-gray-300">{entry.procedureCode}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold border border-gray-300">${entry.amount.toFixed(2)}</td>
+                            <td className="px-6 py-4 whitespace-nowrap border border-gray-300">
                               <span className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(entry.status)}`}>
                                 {entry.status}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm border border-gray-300">
                               <button
                                 className="text-teal-600 hover:text-teal-800 transition-colors p-1 rounded hover:bg-teal-50"
                                 title="View Details"
@@ -455,7 +455,7 @@ function EnhancedOfficeStaffDashboard() {
                       <select
                         value={newIssue.providerId}
                         onChange={(e) => setNewIssue(prev => ({ ...prev, providerId: e.target.value }))}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-transparent select-with-arrow"
                       >
                         <option value="">Select Provider</option>
                         {clinicProviders.map((provider) => (
@@ -465,7 +465,7 @@ function EnhancedOfficeStaffDashboard() {
                       <select
                         value={newIssue.priority}
                         onChange={(e) => setNewIssue(prev => ({ ...prev, priority: e.target.value as any }))}
-                        className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-transparent select-with-arrow"
                       >
                         <option value="low">Low Priority</option>
                         <option value="medium">Medium Priority</option>

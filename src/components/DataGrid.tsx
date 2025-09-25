@@ -43,8 +43,8 @@ export default function DataGrid<T = any>({
 
 	const defaultColDef: ColDef = useMemo(() => ({
 		resizable: true,
-		sortable: true,
-		filter: true,
+		sortable: false,
+		filter: false,
 		editable: !readOnly
 	}), [readOnly]);
 
@@ -137,7 +137,15 @@ export default function DataGrid<T = any>({
 					onGridReady={(p) => { gridApiRef.current = p.api; }}
 					onCellValueChanged={onCellValueChanged}
 					rowSelection={'multiple'}
-					defaultColDef={{ ...defaultColDef, cellStyle: { borderRight: '1px solid #e5e7eb' }, headerClass: 'ag-header-cell' }}
+					defaultColDef={{ 
+						...defaultColDef, 
+						cellStyle: { 
+							borderRight: '1px solid #e5e7eb',
+							borderBottom: '1px solid #e5e7eb',
+							borderLeft: '1px solid #e5e7eb'
+						}, 
+						headerClass: 'ag-header-cell ag-header-cell-with-border'
+					}}
 					headerHeight={36}
 					rowHeight={32}
 				/>

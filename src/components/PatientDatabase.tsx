@@ -238,7 +238,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
         <select
           value={filterInsurance}
           onChange={(e) => setFilterInsurance(e.target.value)}
-          className="px-4 py-2 border text-black border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          className="px-4 py-2 border text-black border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent select-with-arrow"
         >
           <option value="all">All Insurance</option>
           {insuranceOptions.map(insurance => (
@@ -316,7 +316,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                 <select
                   value={newPatient.insurance}
                   onChange={(e) => setNewPatient({ ...newPatient, insurance: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
                 >
                   <option value="">Select Insurance</option>
                   {insuranceOptions.map(insurance => (
@@ -427,7 +427,7 @@ function PatientDatabase({ clinicId, canEdit = true }: PatientDatabaseProps) {
                 <select
                   value={editingPatient.insurance}
                   onChange={(e) => setEditingPatient({ ...editingPatient, insurance: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent select-with-arrow"
                 >
                   <option value="">Select Insurance</option>
                   {insuranceOptions.map(insurance => (

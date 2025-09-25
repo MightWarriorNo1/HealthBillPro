@@ -491,7 +491,7 @@ function TimecardSystem({ userId, canEdit = true }: TimecardSystemProps) {
         <select
           value={viewMode}
           onChange={(e) => setViewMode(e.target.value as 'day' | 'week')}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
         >
           <option value="day">Day</option>
           <option value="week">Week</option>

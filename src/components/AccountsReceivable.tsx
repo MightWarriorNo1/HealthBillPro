@@ -58,6 +58,7 @@ function AccountsReceivable({
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [activePaymentTab, setActivePaymentTab] = useState('all');
 
   const [newEntry, setNewEntry] = useState({
     patient_id: '',
@@ -84,6 +85,11 @@ function AccountsReceivable({
     'A/R Commission',
     'Claim Fees',
     'Total Provider Pay'
+  ];
+
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
   const lockableColumns = ['L', 'O', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AC', 'AD', 'AE'];
@@ -319,6 +325,21 @@ function AccountsReceivable({
   const totalArAmount = arEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const totalProviderPay = providerPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
+  // Filter provider payments by month
+  const filteredProviderPayments = useMemo(() => {
+    if (activePaymentTab === 'all') {
+      return providerPayments;
+    }
+    
+    const monthIndex = parseInt(activePaymentTab);
+    if (isNaN(monthIndex)) return providerPayments;
+    
+    return providerPayments.filter(payment => {
+      const paymentDate = new Date(payment.created_at);
+      return paymentDate.getMonth() === monthIndex - 1 && paymentDate.getFullYear() === currentYear;
+    });
+  }, [providerPayments, activePaymentTab, currentYear]);
+
   // Group AR entries by month for subcategory display
   const monthlyArData = useMemo(() => {
     const months = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -515,7 +536,7 @@ function AccountsReceivable({
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
         >
           <option value="all">All Types</option>
           {typeOptions.map(type => (
@@ -599,24 +620,49 @@ function AccountsReceivable({
         </div>
       )}
 
-      {/* Provider Payments Grid */}
+      {/* Provider Payments Grid with month tabs */}
       <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-gray-900">Provider Payments</h3>
-          {canEdit && !isLocked && (
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Provider Payments</h3>
+            {canEdit && !isLocked && (
+              <button
+                onClick={() => setShowAddPayment(true)}
+                className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Plus size={16} />
+                <span>Add Payment</span>
+              </button>
+            )}
+          </div>
+          {/* Month tabs (All + months) */}
+          <div className="mt-3 flex items-center gap-2 overflow-x-auto">
             <button
-              onClick={() => setShowAddPayment(true)}
-              className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              onClick={() => setActivePaymentTab('all')}
+              className={`px-3 py-1 rounded-full text-xs font-medium border ${activePaymentTab === 'all' ? 'bg-gray-800 text-white border-gray-800' : 'text-gray-800 border-gray-300 bg-white'}`}
             >
-              <Plus size={16} />
-              <span>Add Payment</span>
+              All
             </button>
-          )}
+            {months.map((name, idx) => {
+              const monthIndex = String(idx + 1);
+              const isActive = activePaymentTab === monthIndex;
+              return (
+                <button
+                  key={name}
+                  onClick={() => setActivePaymentTab(monthIndex)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border ${isActive ? 'bg-purple-600 text-white border-purple-600' : 'text-gray-800 border-gray-300 bg-white'}`}
+                  title={`${name} ${currentYear}`}
+                >
+                  {name}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="px-4 py-4">
           <DataGrid
             columnDefs={paymentsColumns}
-            rowData={providerPayments}
+            rowData={filteredProviderPayments}
             readOnly={!canEdit || isLocked}
             onCellValueChanged={onPaymentCellChanged}
           />
@@ -680,7 +726,7 @@ function AccountsReceivable({
                 <select
                   value={newEntry.type}
                   onChange={(e) => setNewEntry({ ...newEntry, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent select-with-arrow"
                 >
                   <option value="">Select Type</option>
                   {typeOptions.map(type => (
@@ -740,7 +786,7 @@ function AccountsReceivable({
                 <select
                   value={newPayment.description}
                   onChange={(e) => setNewPayment({ ...newPayment, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black select-with-arrow"
                 >
                   <option value="">Select Description</option>
                   {paymentDescriptions.map(desc => (

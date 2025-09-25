@@ -656,7 +656,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
             >
               <option value="month">Monthly</option>
               <option value="quarter">Quarterly</option>
@@ -672,7 +672,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
               >
                 {months.map((month, index) => (
                   <option key={index} value={index + 1}>{month}</option>
@@ -689,7 +689,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
               <select
                 value={selectedQuarter}
                 onChange={(e) => setSelectedQuarter(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
               >
                 {quarters.map((quarter, index) => (
                   <option key={index} value={index + 1}>{quarter}</option>
@@ -705,7 +705,7 @@ function ReportingSystem({ clinicId }: ReportingSystemProps) {
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800 select-with-arrow"
             >
               {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
                 <option key={year} value={year}>{year}</option>

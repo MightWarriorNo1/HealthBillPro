@@ -240,6 +240,105 @@
     @apply h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500;
   }
   
+  /* Dropdown Arrow Styles */
+  .select-with-arrow {
+    @apply appearance-none pr-10;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+  }
+  
+  .select-with-arrow:focus {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%233b82f6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  }
+  
+  /* Table Grid Styles */
+  .table-grid {
+    @apply border-collapse;
+  }
+  
+  .table-grid th,
+  .table-grid td {
+    @apply border border-gray-300;
+  }
+  
+  .table-grid th {
+    @apply bg-gray-50 font-medium;
+  }
+  
+  .table-grid tbody tr:hover {
+    @apply bg-gray-50;
+  }
+  
+  /* AG Grid Header Border Styles */
+  .ag-header-cell-with-border {
+    border-right: 1px solid #e5e7eb !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    border-left: 1px solid #e5e7eb !important;
+  }
+  
+  /* AG Grid Select Editor Arrow Styles - Multiple selectors to catch all AG Grid select elements */
+  .ag-theme-alpine .ag-cell-editor select,
+  .ag-theme-alpine .ag-cell-editor .ag-select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor,
+  .ag-theme-alpine .ag-cell-editor input[type="select"],
+  .ag-theme-alpine .ag-cell-editor .ag-select-editor,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input {
+    @apply appearance-none pr-10 !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
+    background-position: right 0.5rem center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1.5em 1.5em !important;
+  }
+  
+  .ag-theme-alpine .ag-cell-editor select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor:focus,
+  .ag-theme-alpine .ag-cell-editor input[type="select"]:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-editor:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input:focus {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%233b82f6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
+  }
+  
+  /* Additional AG Grid select targeting */
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input {
+    @apply appearance-none pr-10 !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
+    background-position: right 0.5rem center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1.5em 1.5em !important;
+  }
+  
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input:focus {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%233b82f6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
+  }
+  
+  /* AG Grid cells with arrow indicator */
+  .ag-theme-alpine .ag-cell.ag-cell-with-arrow {
+    position: relative;
+  }
+  
+  .ag-theme-alpine .ag-cell.ag-cell-with-arrow::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid #6b7280;
+    pointer-events: none;
+  }
+  
+  .ag-theme-alpine .ag-cell.ag-cell-with-arrow:hover::after {
+    border-top-color: #3b82f6;
+  }
+
   /* Notification Styles */
   .notification {
     @apply fixed top-4 right-4 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-4 shadow-2xl z-50;

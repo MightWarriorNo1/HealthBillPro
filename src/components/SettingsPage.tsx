@@ -245,7 +245,7 @@ function SettingsPage() {
             <select
               value={settings.theme}
               onChange={(e) => handleSettingChange('theme', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent select-with-arrow"
             >
               <option value="light">Light</option>
               <option value="dark">Dark</option>
@@ -257,7 +257,7 @@ function SettingsPage() {
             <select
               value={settings.timezone}
               onChange={(e) => handleSettingChange('timezone', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent select-with-arrow"
             >
               <option value="America/New_York">Eastern Time</option>
               <option value="America/Chicago">Central Time</option>
@@ -270,7 +270,7 @@ function SettingsPage() {
             <select
               value={settings.dateFormat}
               onChange={(e) => handleSettingChange('dateFormat', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent select-with-arrow"
             >
               <option value="MM/dd/yyyy">MM/DD/YYYY</option>
               <option value="dd/MM/yyyy">DD/MM/YYYY</option>
@@ -282,7 +282,7 @@ function SettingsPage() {
             <select
               value={settings.currency}
               onChange={(e) => handleSettingChange('currency', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent select-with-arrow"
             >
               <option value="USD">USD ($)</option>
               <option value="EUR">EUR (€)</option>
@@ -485,7 +485,7 @@ function SettingsPage() {
             <select
               value={settings.backupFrequency}
               onChange={(e) => handleSettingChange('backupFrequency', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent select-with-arrow"
             >
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>

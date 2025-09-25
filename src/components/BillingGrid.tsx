@@ -149,7 +149,16 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   const columnDefs: Array<ColDef | ColGroupDef> = useMemo(() => {
     const defs: Array<[string, ColDef]> = [
       ['patient_name', { headerName: 'Patient Name', editable: !readOnly }],
-      ['procedure_code', { headerName: 'Procedure Code', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: billingCodes } }],
+      ['procedure_code', { 
+        headerName: 'Procedure Code', 
+        editable: !readOnly, 
+        cellEditor: 'agSelectCellEditor', 
+        cellEditorParams: { 
+          values: billingCodes,
+          cellEditorPopup: true
+        },
+        cellClass: 'ag-cell-with-arrow'
+      }],
       ['description', { headerName: 'Description', editable: !readOnly }],
       ['amount', { headerName: 'Amount', editable: !readOnly, valueParser: numberParser }],
       ['date', { headerName: 'Date', editable: !readOnly, valueFormatter: (p: any) => {
@@ -161,10 +170,28 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         const yy = String(d.getFullYear()).slice(-2);
         return `${mm}-${dd}-${yy}`;
       }}],
-      ['status', { headerName: 'Claim Status', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Claim Sent','RS','IP','Paid','Denial','Rejection','No Coverage','PP','Deductible','N/A','pending','approved','rejected'] } }],
+      ['status', { 
+        headerName: 'Claim Status', 
+        editable: !readOnly, 
+        cellEditor: 'agSelectCellEditor', 
+        cellEditorParams: { 
+          values: ['Claim Sent','RS','IP','Paid','Denial','Rejection','No Coverage','PP','Deductible','N/A','pending','approved','rejected'],
+          cellEditorPopup: true
+        },
+        cellClass: 'ag-cell-with-arrow'
+      }],
       ['claim_number', { headerName: 'Claim #', editable: !readOnly }],
       ['notes', { headerName: 'Notes', editable: !readOnly }],
-      ['appointment_status', { headerName: 'Appt Status', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Complete','PP Complete','Charge NS/LC','RS No Charge','NS No Charge','Note not complete'] } }],
+      ['appointment_status', { 
+        headerName: 'Appt Status', 
+        editable: !readOnly, 
+        cellEditor: 'agSelectCellEditor', 
+        cellEditorParams: { 
+          values: ['Complete','PP Complete','Charge NS/LC','RS No Charge','NS No Charge','Note not complete'],
+          cellEditorPopup: true
+        },
+        cellClass: 'ag-cell-with-arrow'
+      }],
       ['submit_info', { headerName: 'Submit Info', editable: !readOnly, valueFormatter: (p: any) => {
         // If value looks like a date, show MM-DD, else raw
         if (!p.value) return '';
@@ -487,7 +514,18 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           onCellValueChanged={onCellValueChanged}
           onPasteEnd={onPaste}
           rowSelection={'multiple'}
-          defaultColDef={{ resizable: true, sortable: true, filter: true, editable: !readOnly }}
+          defaultColDef={{ 
+            resizable: true, 
+            sortable: false, 
+            filter: false, 
+            editable: !readOnly,
+            cellStyle: { 
+              borderRight: '1px solid #e5e7eb',
+              borderBottom: '1px solid #e5e7eb',
+              borderLeft: '1px solid #e5e7eb'
+            },
+            headerClass: 'ag-header-cell ag-header-cell-with-border'
+          }}
         />
       </div>
       {/* Totals Footer */}

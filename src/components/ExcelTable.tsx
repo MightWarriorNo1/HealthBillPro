@@ -354,7 +354,7 @@ function ExcelTable({
             <select
               value={editingValue}
               onChange={(e) => setEditingValue(e.target.value)}
-              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm select-with-arrow"
               autoFocus
             >
               <option value="">Select...</option>
@@ -380,7 +380,7 @@ function ExcelTable({
                     handleCellCancel();
                   }
                 }}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                className="w-full px-2 py-1 border border-gray-300 rounded text-sm select-with-arrow"
                 autoFocus
                 size={Math.min(column.options?.length || 5, 8)}
               >
@@ -569,11 +569,11 @@ function ExcelTable({
 
       {/* Table */}
       <div className="overflow-x-auto w-full">
-        <table className="w-full min-w-max table-fixed border border-gray-200 rounded-lg">
+        <table className="w-full min-w-max table-fixed border-collapse border border-gray-300">
           <thead className="bg-gray-50">
             <tr>
               {/* Select All Checkbox */}
-              <th className="px-4 py-3 text-left w-12 border-b border-gray-200">
+              <th className="px-4 py-3 text-left w-12 border border-gray-300">
                 <div className="flex flex-col items-center space-y-2">
                   <input
                     type="checkbox"
@@ -589,7 +589,7 @@ function ExcelTable({
               {columns.map(column => (
                 <th
                   key={column.id}
-                  className="px-4 py-3 text-left font-medium text-gray-900 whitespace-nowrap border-b border-gray-200"
+                  className="px-4 py-3 text-left font-medium text-gray-900 whitespace-nowrap border border-gray-300"
                   style={{ width: column.width ? `${column.width}px` : 'auto' }}
                 >
                   <div className="flex flex-col space-y-2">
@@ -631,11 +631,11 @@ function ExcelTable({
             </tr>
           </thead>
           
-          <tbody className="divide-y divide-gray-200">
+          <tbody>
             {filteredAndSortedData.map(row => (
               <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                 {/* Row Checkbox */}
-                <td className="px-4 py-3 w-12 border-r border-gray-200">
+                <td className="px-4 py-3 w-12 border border-gray-300">
                   <div className="flex justify-center">
                     <input
                       type="checkbox"
@@ -651,7 +651,7 @@ function ExcelTable({
                 {columns.map(column => (
                   <td
                     key={column.id}
-                    className="px-4 py-3 text-sm text-gray-900 min-w-0 border-r border-gray-200"
+                    className="px-4 py-3 text-sm text-gray-900 min-w-0 border border-gray-300"
                     style={{ width: column.width ? `${column.width}px` : 'auto' }}
                   >
                     <div className="truncate">
