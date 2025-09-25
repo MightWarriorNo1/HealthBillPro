@@ -26,6 +26,7 @@ interface ProviderPayment {
   id: string;
   description: string;
   amount: number;
+  month?: string;
   notes: string;
   created_at: string;
 }
@@ -71,6 +72,7 @@ function AccountsReceivable({
   const [newPayment, setNewPayment] = useState({
     description: '',
     amount: 0,
+    month: '',
     notes: ''
   });
 
@@ -221,6 +223,7 @@ function AccountsReceivable({
       setNewPayment({
         description: '',
         amount: 0,
+        month: '',
         notes: ''
       });
       loadData();
@@ -401,6 +404,17 @@ function AccountsReceivable({
   const paymentsColumns: ColDef[] = useMemo(() => ([
     { field: 'description', headerName: 'Description', editable: canEdit && !isLocked },
     { field: 'amount', headerName: 'Amount', editable: canEdit && !isLocked, valueParser: (p: any) => parseFloat(p.newValue) || 0 },
+    { 
+      field: 'month', 
+      headerName: 'Month', 
+      editable: canEdit && !isLocked,
+      cellEditor: 'agSelectCellEditor',
+      cellEditorParams: { 
+        values: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        cellEditorPopup: true
+      },
+      cellClass: 'ag-cell-with-arrow'
+    },
     { field: 'notes', headerName: 'Notes', editable: canEdit && !isLocked }
   ]), [canEdit, isLocked]);
 
@@ -806,6 +820,21 @@ function AccountsReceivable({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   placeholder="0.00"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Month
+                </label>
+                <select
+                  value={newPayment.month}
+                  onChange={(e) => setNewPayment({ ...newPayment, month: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black select-with-arrow"
+                >
+                  <option value="">Select Month</option>
+                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(month => (
+                    <option key={month} value={month}>{month}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
