@@ -6,9 +6,11 @@ import {
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import Header from './Header';
 import PatientDatabase from './PatientDatabase';
 import EnhancedBillingInterface from './EnhancedBillingInterface';
+import AccountsReceivableComponent from './AccountsReceivable';
 import TodoSystem from './TodoSystem';
 import TimecardSystem from './TimecardSystem';
 import ReportingSystem from './ReportingSystem';
@@ -56,6 +58,26 @@ function SuperAdminDashboard() {
     totalAccountsReceivable: 'bg-pink-50'
   });
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [showAccountsReceivable, setShowAccountsReceivable] = useState(false);
+  const [editingClinic, setEditingClinic] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<string | null>(null);
+  const [clinicFormData, setClinicFormData] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: '',
+    description: ''
+  });
+  const [providerFormData, setProviderFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    specialty: '',
+    license: '',
+    notes: ''
+  });
 
   // Ensure EnhancedBillingInterface reflects selected year when a provider year tab is active
   useEffect(() => {
@@ -67,6 +89,91 @@ function SuperAdminDashboard() {
       }
     }
   }, [activeTab]);
+
+  // Listen for month changes from EnhancedBillingInterface
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e?.detail?.month) {
+        setSelectedMonth(e.detail.month);
+      }
+    };
+    window.addEventListener('billing:select-month', handler as EventListener);
+    return () => {
+      window.removeEventListener('billing:select-month', handler as EventListener);
+    };
+  }, []);
+
+  // Reset accounts receivable view when switching providers or years
+  useEffect(() => {
+    setShowAccountsReceivable(false);
+  }, [activeTab]);
+
+  // Initialize clinic form data when clinic is selected
+  useEffect(() => {
+    if (selectedClinic && !selectedClinic.includes('clinic-')) {
+      const clinicId = selectedClinic.replace('clinic-', '');
+      const clinic = clinics.find(c => c.id === clinicId);
+      if (clinic) {
+        setClinicFormData({
+          name: clinic.name || '',
+          address: clinic.address || '',
+          phone: clinic.phone || '',
+          email: (clinic as any).email || '',
+          website: (clinic as any).website || '',
+          description: (clinic as any).description || ''
+        });
+      }
+    }
+  }, [selectedClinic, clinics]);
+
+  const handleSaveClinic = async () => {
+    if (!selectedClinic) return;
+    const clinicId = selectedClinic.replace('clinic-', '');
+    
+    try {
+      const { error } = await supabase
+        .from('clinics')
+        .update(clinicFormData)
+        .eq('id', clinicId);
+      
+      if (error) throw error;
+      
+      setEditingClinic(false);
+      // Refresh data
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error updating clinic:', error);
+    }
+  };
+
+  const handleSaveProvider = async (providerId: string) => {
+    try {
+      const { error } = await supabase
+        .from('providers')
+        .update(providerFormData)
+        .eq('id', providerId);
+      
+      if (error) throw error;
+      
+      setEditingProvider(null);
+      // Refresh data
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error updating provider:', error);
+    }
+  };
+
+  const startEditingProvider = (provider: any) => {
+    setProviderFormData({
+      name: provider.name || '',
+      email: provider.email || '',
+      phone: provider.phone || '',
+      specialty: provider.specialty || '',
+      license: provider.license || '',
+      notes: provider.notes || ''
+    });
+    setEditingProvider(provider.id);
+  };
 
   const colorOptions = [
     { name: 'Blue', class: 'bg-blue-50', textClass: 'text-blue-900', valueClass: 'text-blue-600' },
@@ -488,7 +595,7 @@ function SuperAdminDashboard() {
             {/* Clinic Breakdowns - horizontal scroll */}
             <div className="bg-white rounded-lg shadow p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Clinic Breakdowns</h3>
-              <div className="flex gap-4 overflow-x-auto pb-2">
+              <div className="flex flex-col gap-4 overflow-x-auto pb-2">
                 {clinics.map(clinic => {
                   const clinicProviders = providers.filter(p => p.clinicId === clinic.id);
                   const clinicPatients = patients.filter(p => p.clinicId === clinic.id);
@@ -507,8 +614,8 @@ function SuperAdminDashboard() {
                   const openTodos = clinicTodos.filter(t => t.status === 'waiting' || t.status === 'in_progress' || t.status === 'ip' || t.status === 'on_hold').length;
 
                   return (
-                    <div key={clinic.id} className="min-w-[280px] border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between mb-2">
+                    <div key={clinic.id} className="min-w-[320px] border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-3">
                         <h4 className="font-medium text-gray-900">{clinic.name}</h4>
                         <button
                           onClick={() => {
@@ -520,45 +627,45 @@ function SuperAdminDashboard() {
                           View Clinic
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="bg-blue-50 p-3 rounded">
-                          <div className="text-blue-900">Providers</div>
+                      <div className="flex flex-wrap gap-2 text-sm">
+                        <div className="bg-blue-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-blue-900 text-xs">Providers</div>
                           <div className="text-lg font-semibold text-blue-700">{clinicProviders.length}</div>
                         </div>
-                        <div className="bg-green-50 p-3 rounded">
-                          <div className="text-green-900">Patients</div>
+                        <div className="bg-green-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-green-900 text-xs">Patients</div>
                           <div className="text-lg font-semibold text-green-700">{clinicPatients.length}</div>
                         </div>
-                        <div className="bg-purple-50 p-3 rounded">
-                          <div className="text-purple-900">Total Claims</div>
+                        <div className="bg-purple-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-purple-900 text-xs">Total Claims</div>
                           <div className="text-lg font-semibold text-purple-700">{clinicBillingEntries.length}</div>
                         </div>
-                        <div className="bg-yellow-50 p-3 rounded">
-                          <div className="text-yellow-900">Pending</div>
+                        <div className="bg-yellow-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-yellow-900 text-xs">Pending</div>
                           <div className="text-lg font-semibold text-yellow-700">{pendingCount}</div>
                         </div>
-                        <div className="bg-indigo-50 p-3 rounded">
-                          <div className="text-indigo-900">Approved</div>
+                        <div className="bg-indigo-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-indigo-900 text-xs">Approved</div>
                           <div className="text-lg font-semibold text-indigo-700">{approvedCount}</div>
                         </div>
-                        <div className="bg-red-50 p-3 rounded">
-                          <div className="text-red-900">Rejected</div>
+                        <div className="bg-red-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-red-900 text-xs">Rejected</div>
                           <div className="text-lg font-semibold text-red-700">{rejectedCount}</div>
                         </div>
-                        <div className="bg-teal-50 p-3 rounded">
-                          <div className="text-teal-900">Paid</div>
+                        <div className="bg-teal-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-teal-900 text-xs">Paid</div>
                           <div className="text-lg font-semibold text-teal-700">{paidCount}</div>
                         </div>
-                        <div className="bg-orange-50 p-3 rounded">
-                          <div className="text-orange-900">Revenue (Paid)</div>
+                        <div className="bg-orange-50 p-2 rounded flex-1 min-w-[100px]">
+                          <div className="text-orange-900 text-xs">Revenue</div>
                           <div className="text-lg font-semibold text-orange-700">${totalRevenue.toLocaleString()}</div>
                         </div>
-                        <div className="bg-pink-50 p-3 rounded">
-                          <div className="text-pink-900">Accounts Receivable</div>
+                        <div className="bg-pink-50 p-2 rounded flex-1 min-w-[100px]">
+                          <div className="text-pink-900 text-xs">A/R</div>
                           <div className="text-lg font-semibold text-pink-700">${totalAR.toLocaleString()}</div>
                         </div>
-                        <div className="bg-gray-50 p-3 rounded">
-                          <div className="text-gray-900">Open To-Dos</div>
+                        <div className="bg-gray-50 p-2 rounded flex-1 min-w-[80px]">
+                          <div className="text-gray-900 text-xs">To-Dos</div>
                           <div className="text-lg font-semibold text-gray-700">{openTodos}</div>
                         </div>
                       </div>
@@ -651,9 +758,6 @@ function SuperAdminDashboard() {
     if (activeTab.includes('clinic-') && activeTab.includes('-todo')) {
       // Use the selected clinic ID from state instead of parsing from activeTab
       const clinicId = selectedClinic ? selectedClinic.replace('clinic-', '') : null;
-      console.log('Clinic sub-item - todo, activeTab:', activeTab);
-      console.log('Clinic sub-item - todo, selectedClinic:', selectedClinic);
-      console.log('Clinic sub-item - todo, clinicId:', clinicId);
       
       if (!clinicId) {
         return (
@@ -751,24 +855,209 @@ function SuperAdminDashboard() {
 
             {/* Clinic Details */}
             <div className="bg-white rounded-lg shadow p-6">
-              <h4 className="font-medium text-gray-900 mb-4">Clinic Information</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-2">Contact Details</h5>
-                  <p className="text-sm text-gray-600"><strong>Name:</strong> {clinic.name}</p>
-                  <p className="text-sm text-gray-600"><strong>Address:</strong> {clinic.address}</p>
-                  <p className="text-sm text-gray-600"><strong>Phone:</strong> {clinic.phone}</p>
-                </div>
-                <div>
-                  <h5 className="font-medium text-gray-700 mb-2">Providers</h5>
-                  <div className="space-y-1">
-                    {clinicProviders.map(provider => (
-                      <p key={provider.id} className="text-sm text-gray-600">• {provider.name}</p>
-                    ))}
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-medium text-gray-900">Clinic Information</h4>
+                <button
+                  onClick={() => setEditingClinic(!editingClinic)}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  {editingClinic ? 'Cancel' : 'Edit'}
+                </button>
+              </div>
+              
+              {!editingClinic ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-2">Contact Details</h5>
+                    <p className="text-sm text-gray-600"><strong>Name:</strong> {clinic.name}</p>
+                    <p className="text-sm text-gray-600"><strong>Address:</strong> {clinic.address || 'Not provided'}</p>
+                    <p className="text-sm text-gray-600"><strong>Phone:</strong> {clinic.phone || 'Not provided'}</p>
+                    <p className="text-sm text-gray-600"><strong>Email:</strong> {(clinic as any).email || 'Not provided'}</p>
+                    <p className="text-sm text-gray-600"><strong>Website:</strong> {(clinic as any).website || 'Not provided'}</p>
+                    {(clinic as any).description && (
+                      <p className="text-sm text-gray-600 mt-2"><strong>Description:</strong> {(clinic as any).description}</p>
+                    )}
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-700 mb-2">Providers ({clinicProviders.length})</h5>
+                    <div className="space-y-2">
+                      {clinicProviders.map(provider => (
+                        <div key={provider.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{provider.name}</p>
+                            <p className="text-xs text-gray-600">{(provider as any)?.specialty || 'No specialty specified'}</p>
+                          </div>
+                          <button
+                            onClick={() => startEditingProvider(provider)}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Clinic Name</label>
+                      <input
+                        type="text"
+                        value={clinicFormData.name}
+                        onChange={(e) => setClinicFormData({...clinicFormData, name: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <input
+                        type="text"
+                        value={clinicFormData.phone}
+                        onChange={(e) => setClinicFormData({...clinicFormData, phone: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={clinicFormData.email}
+                        onChange={(e) => setClinicFormData({...clinicFormData, email: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                      <input
+                        type="url"
+                        value={clinicFormData.website}
+                        onChange={(e) => setClinicFormData({...clinicFormData, website: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                      <input
+                        type="text"
+                        value={clinicFormData.address}
+                        onChange={(e) => setClinicFormData({...clinicFormData, address: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                      <textarea
+                        value={clinicFormData.description}
+                        onChange={(e) => setClinicFormData({...clinicFormData, description: e.target.value})}
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => setEditingClinic(false)}
+                      className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveClinic}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Provider Details */}
+            {editingProvider && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-medium text-gray-900">Edit Provider Information</h4>
+                  <button
+                    onClick={() => setEditingProvider(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Provider Name</label>
+                    <input
+                      type="text"
+                      value={providerFormData.name}
+                      onChange={(e) => setProviderFormData({...providerFormData, name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={providerFormData.email}
+                      onChange={(e) => setProviderFormData({...providerFormData, email: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="text"
+                      value={providerFormData.phone}
+                      onChange={(e) => setProviderFormData({...providerFormData, phone: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Specialty</label>
+                    <input
+                      type="text"
+                      value={providerFormData.specialty}
+                      onChange={(e) => setProviderFormData({...providerFormData, specialty: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">License Number</label>
+                    <input
+                      type="text"
+                      value={providerFormData.license}
+                      onChange={(e) => setProviderFormData({...providerFormData, license: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <textarea
+                      value={providerFormData.notes}
+                      onChange={(e) => setProviderFormData({...providerFormData, notes: e.target.value})}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-3 mt-4">
+                  <button
+                    onClick={() => setEditingProvider(null)}
+                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleSaveProvider(editingProvider)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -969,92 +1258,78 @@ function SuperAdminDashboard() {
       // Additional comprehensive metrics
       const totalBillingEntries = providerBillingEntries.length;
       const totalPaidClaims = providerBillingEntries.filter(entry => entry.status === 'paid').length;
-      const totalApprovedClaims = providerBillingEntries.filter(entry => entry.status === 'approved').length;
-      const totalRejectedClaims = providerBillingEntries.filter(entry => entry.status === 'rejected').length;
+      // const totalApprovedClaims = providerBillingEntries.filter(entry => entry.status === 'approved').length;
+      // const totalRejectedClaims = providerBillingEntries.filter(entry => entry.status === 'rejected').length;
       
-      // Calculate billing efficiency metrics
-      const billingEfficiency = totalBillingEntries > 0 ? Math.round((totalPaidClaims / totalBillingEntries) * 100) : 0;
-      const averageRevenuePerClaim = totalPaidClaims > 0 ? Math.round(totalRevenue / totalPaidClaims) : 0;
+      // // Calculate billing efficiency metrics
+      // const billingEfficiency = totalBillingEntries > 0 ? Math.round((totalPaidClaims / totalBillingEntries) * 100) : 0;
+      // const averageRevenuePerClaim = totalPaidClaims > 0 ? Math.round(totalRevenue / totalPaidClaims) : 0;
 
       return (
         <div className="space-y-6">
-          {/* Provider Year Overview */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{provider.name} - {year} Overview</h3>
-            
-            {/* Revenue & Financial Metrics for the year */}
-            <div className="mb-6">
-              <h4 className="text-md font-semibold text-gray-800 mb-3">Financial Performance ({year})</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-green-50 p-3 rounded-lg border-l-4 border-green-500">
-                  <h5 className="font-medium text-green-900 text-sm">Total Revenue</h5>
-                  <p className="text-xl font-bold text-green-600">${totalRevenue.toLocaleString()}</p>
-                  <p className="text-xs text-green-700">{year} only</p>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-lg border-l-4 border-blue-500">
-                  <h5 className="font-medium text-blue-900 text-sm">Avg Revenue/Claim</h5>
-                  <p className="text-xl font-bold text-blue-600">${averageRevenuePerClaim.toLocaleString()}</p>
-                  <p className="text-xs text-blue-700">Per paid claim</p>
-                </div>
-                <div className="bg-purple-50 p-3 rounded-lg border-l-4 border-purple-500">
-                  <h5 className="font-medium text-purple-900 text-sm">Billing Efficiency</h5>
-                  <p className="text-xl font-bold text-purple-600">{billingEfficiency}%</p>
-                  <p className="text-xs text-purple-700">Paid vs total claims</p>
-                </div>
-                <div className="bg-indigo-50 p-3 rounded-lg border-l-4 border-indigo-500">
-                  <h5 className="font-medium text-indigo-900 text-sm">Total Claims</h5>
-                  <p className="text-xl font-bold text-indigo-600">{totalBillingEntries}</p>
-                  <p className="text-xs text-indigo-700">{year} entries</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Claims Status Breakdown for the year */}
-            <div className="mb-6">
-              <h4 className="text-md font-semibold text-gray-800 mb-3">Claims Status Overview ({year})</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-green-50 p-3 rounded-lg">
-                  <h5 className="font-medium text-green-900 text-sm">Paid Claims</h5>
-                  <p className="text-lg font-bold text-green-600">{totalPaidClaims}</p>
-                </div>
-                <div className="bg-yellow-50 p-3 rounded-lg">
-                  <h5 className="font-medium text-yellow-900 text-sm">Pending Claims</h5>
-                  <p className="text-lg font-bold text-yellow-600">{totalPendingClaims}</p>
-                </div>
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <h5 className="font-medium text-blue-900 text-sm">Approved Claims</h5>
-                  <p className="text-lg font-bold text-blue-600">{totalApprovedClaims}</p>
-                </div>
-                <div className="bg-red-50 p-3 rounded-lg">
-                  <h5 className="font-medium text-red-900 text-sm">Rejected Claims</h5>
-                  <p className="text-lg font-bold text-red-600">{totalRejectedClaims}</p>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Billing for selected year with month pills in header */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {provider.name} - {year} Billing
-              </h3>
-              <p className="text-sm text-gray-600">
-                Select a month in the header of the billing sheet for {year}
-              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {provider.name} - {year} Billing
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Select a month in the header of the billing sheet for {year}
+                  </p>
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowAccountsReceivable(false)}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                      !showAccountsReceivable 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <FileText size={16} />
+                    <span>Billing</span>
+                  </button>
+                  <button
+                    onClick={() => setShowAccountsReceivable(true)}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                      showAccountsReceivable 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    <DollarSign size={16} />
+                    <span>Accounts Receivable</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="p-6">
-              <EnhancedBillingInterface
-                providerId={providerId}
-                clinicId={provider.clinicId}
-                canEdit={true}
-                userRole="super_admin"
-              />
-            </div>
+            {!showAccountsReceivable ? (
+              <div className="p-6">
+                <EnhancedBillingInterface
+                  providerId={providerId}
+                  clinicId={provider.clinicId}
+                  canEdit={true}
+                  userRole="super_admin"
+                  hideAccountsReceivable={true}
+                />
+              </div>
+            ) : (
+              <div className="p-6">
+                <AccountsReceivableComponent
+                  clinicId={provider.clinicId}
+                  canEdit={true}
+                  showMonthlySubcategories={true}
+                />
+              </div>
+            )}
           </div>
         </div>
       );
     }
+
 
     // Default fallback
     return (

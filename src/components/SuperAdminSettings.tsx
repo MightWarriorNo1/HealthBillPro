@@ -801,9 +801,9 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Clinic Management</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Clinic Management</h3>
                 <p className="text-sm text-gray-600">Add, edit, and remove clinics</p>
-              </div>
+            </div>
               <button
                 onClick={() => { setEditingClinic(null); setShowAddClinic(true); }}
                 className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
@@ -811,7 +811,7 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                 <Plus size={16} />
                 <span>Add Clinic</span>
               </button>
-            </div>
+                  </div>
 
             <div className="bg-white rounded-lg shadow overflow-hidden">
               <div className="overflow-x-auto">
@@ -847,8 +847,8 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                               title="Delete Clinic"
                             >
                               <Trash2 size={16} />
-                            </button>
-                          </div>
+                  </button>
+                </div>
                         </td>
                       </tr>
                     ))}

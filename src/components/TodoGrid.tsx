@@ -33,9 +33,14 @@ export default function TodoGrid({ clinicId, canEdit = true }: TodoGridProps) {
   const columnDefs: ColDef[] = useMemo(() => ([
     { field: 'claim_id', headerName: 'ID', editable: canEdit },
     {
-      field: 'status', headerName: 'Status', editable: canEdit, cellEditor: 'agSelectCellEditor', cellEditorParams: {
+      field: 'status', 
+      headerName: 'Status', 
+      editable: canEdit, 
+      cellEditor: 'agSelectCellEditor', 
+      cellEditorParams: {
         values: statusValues
-      }
+      },
+      cellClass: 'ag-cell-with-arrow'
     },
     { field: 'issue', headerName: 'Issue', editable: canEdit },
     { field: 'notes', headerName: 'Notes', editable: canEdit, flex: 1 },

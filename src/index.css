@@ -278,13 +278,18 @@
     border-left: 1px solid #e5e7eb !important;
   }
   
-  /* AG Grid Select Editor Arrow Styles - Multiple selectors to catch all AG Grid select elements */
+  /* AG Grid Select Editor Arrow Styles - Enhanced selectors for better coverage */
   .ag-theme-alpine .ag-cell-editor select,
   .ag-theme-alpine .ag-cell-editor .ag-select,
   .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor,
   .ag-theme-alpine .ag-cell-editor input[type="select"],
   .ag-theme-alpine .ag-cell-editor .ag-select-editor,
-  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input {
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-editor {
     @apply appearance-none pr-10 !important;
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
     background-position: right 0.5rem center !important;
@@ -297,13 +302,25 @@
   .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor:focus,
   .ag-theme-alpine .ag-cell-editor input[type="select"]:focus,
   .ag-theme-alpine .ag-cell-editor .ag-select-editor:focus,
-  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input:focus {
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-editor:focus {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%233b82f6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
   }
   
-  /* Additional AG Grid select targeting */
+  /* Additional AG Grid select targeting - More comprehensive coverage */
   .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input,
-  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input {
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-editor,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor-input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor-input input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor-input select {
     @apply appearance-none pr-10 !important;
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
     background-position: right 0.5rem center !important;
@@ -312,7 +329,14 @@
   }
   
   .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input:focus,
-  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input:focus {
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-editor:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor-input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor-input input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor-input select:focus {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%233b82f6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
   }
   
@@ -337,6 +361,41 @@
   
   .ag-theme-alpine .ag-cell.ag-cell-with-arrow:hover::after {
     border-top-color: #3b82f6;
+  }
+  
+  /* Universal AG Grid select element targeting - Fallback for any missed selectors */
+  .ag-theme-alpine select,
+  .ag-theme-alpine .ag-cell-editor select,
+  .ag-theme-alpine .ag-cell-editor input[type="select"],
+  .ag-theme-alpine .ag-cell-editor .ag-select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor,
+  .ag-theme-alpine .ag-cell-editor .ag-select-editor,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-editor {
+    @apply appearance-none pr-10 !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
+    background-position: right 0.5rem center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1.5em 1.5em !important;
+  }
+  
+  .ag-theme-alpine select:focus,
+  .ag-theme-alpine .ag-cell-editor select:focus,
+  .ag-theme-alpine .ag-cell-editor input[type="select"]:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-editor:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input input:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-cell-editor:focus,
+  .ag-theme-alpine .ag-cell-editor .ag-select-cell-editor-input .ag-select-editor:focus {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%233b82f6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
   }
 
   /* Notification Styles */

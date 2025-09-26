@@ -1,7 +1,7 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { DollarSign } from 'lucide-react';
 import { AgGridReact } from 'ag-grid-react';
-import { ColDef, ColGroupDef, GridApi, GridOptions, RowSelectedEvent, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
+import { ColDef, ColGroupDef, GridApi, GridOptions, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { supabase } from '../lib/supabase';
@@ -57,7 +57,7 @@ const NUMBER_COLS = new Set(['amount', 'insurance_payment', 'payment_amount', 'c
 export default function BillingGrid({ clinicId, providerId, readOnly, visibleColumns, dateRange }: BillingGridProps) {
   const gridApiRef = useRef<GridApi | null>(null);
   const [rowData, setRowData] = useState<Entry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [billingCodes, setBillingCodes] = useState<string[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [highlightedRowIds, setHighlightedRowIds] = useState<Set<string>>(new Set());
@@ -266,6 +266,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
 
     const baseCols = defs.map(([field, col]) => ({ field, ...col } as ColDef));
 
+    // Only use individual columns if visibleColumns is explicitly provided and not empty
     if (visibleColumns && visibleColumns.length > 0) {
       const map: Record<string, string> = {
         A: 'patient_name',
@@ -290,52 +291,68 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     }
     // Grouped headers to match the exact structure from the image
     const adminChildren: ColDef[] = [
-      { field: 'id', headerName: 'ID', headerClass: 'bg-purple-100', editable: !readOnly },
-      { field: 'patient_name', headerName: 'First Name', headerClass: 'bg-purple-100', editable: !readOnly },
-      { field: 'last_initial', headerName: 'Last Initial', headerClass: 'bg-purple-100', editable: !readOnly },
-      { field: 'insurance', headerName: 'Ins', headerClass: 'bg-purple-100', editable: !readOnly },
-      { field: 'copay', headerName: 'Co-pay', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser },
-      { field: 'coinsurance', headerName: 'Co-ins', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser },
-      { field: 'date', headerName: 'Date of Service', headerClass: 'bg-purple-100', editable: !readOnly }
+      { field: 'id', headerName: 'ID', headerClass: 'bg-purple-100', editable: !readOnly, width: 80 },
+      { field: 'patient_name', headerName: 'First Name', headerClass: 'bg-purple-100', editable: !readOnly, width: 120 },
+      { field: 'last_initial', headerName: 'Last Initial', headerClass: 'bg-purple-100', editable: !readOnly, width: 100 },
+      { field: 'insurance', headerName: 'Ins', headerClass: 'bg-purple-100', editable: !readOnly, width: 100 },
+      { field: 'copay', headerName: 'Co-pay', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', width: 100 },
+      { field: 'coinsurance', headerName: 'Co-ins', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', width: 100 },
+      { field: 'date', headerName: 'Date of Service', headerClass: 'bg-purple-100', editable: !readOnly, valueFormatter: (p: any) => {
+        if (!p.value) return '';
+        const d = new Date(p.value);
+        if (isNaN(d.getTime())) return p.value;
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(-2);
+        return `${mm}-${dd}-${yy}`;
+      }, width: 120 }
     ];
     const providerChildren: ColDef[] = [
-      { field: 'procedure_code', headerName: 'CPT Code', headerClass: 'bg-orange-100', cellEditor: 'agSelectCellEditor', cellEditorParams: { values: billingCodes }, editable: !readOnly },
-      { field: 'appointment_status', headerName: 'Appt Status', headerClass: 'bg-orange-100', editable: !readOnly }
+      { field: 'procedure_code', headerName: 'CPT Code', headerClass: 'bg-orange-100', cellEditor: 'agSelectCellEditor', cellEditorParams: { values: billingCodes }, cellClass: 'ag-cell-with-arrow', editable: !readOnly, width: 100 },
+      { field: 'appointment_status', headerName: 'Appt Status', headerClass: 'bg-orange-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Scheduled', 'Completed', 'Cancelled', 'No Show', 'Rescheduled'] }, cellClass: 'ag-cell-with-arrow', width: 120 }
     ];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
     const billingChildren: ColDef[] = [
-      { field: 'status', headerName: 'Claim Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Claim Sent','RS','IP','Paid','Denial','Rejection','No Coverage','PP','Deductible','N/A','pending','approved','rejected'] } },
-      { field: 'submit_info', headerName: 'Most Recent Submit Date', headerClass: 'bg-green-100', editable: !readOnly },
-      { field: 'insurance_payment', headerName: 'Ins Pay', headerClass: 'bg-green-100', valueParser: numberParser, editable: !readOnly },
-      { field: 'insurance_notes', headerName: 'Ins Pay Date', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
-      { field: 'description', headerName: 'PT RES', headerClass: 'bg-green-100', editable: !readOnly },
-      { field: 'payment_amount', headerName: 'Collected from PT', headerClass: 'bg-green-100', valueParser: numberParser, editable: !readOnly },
-      { field: 'payment_status', headerName: 'PT Pay Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Paid','CC declined','Secondary','Refunded','Payment Plan','Waiting on Claims',''] } },
-      { field: 'claim_number', headerName: 'PT Payment AR Ref Date', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
-      { field: 'amount', headerName: 'Total Pay', headerClass: 'bg-green-100', valueParser: numberParser, editable: !readOnly },
-      { field: 'notes', headerName: 'Notes', headerClass: 'bg-green-100', editable: !readOnly }
-    ];
-    const arChildren: ColDef[] = [
-      { field: 'ar_name', headerName: 'Name', headerClass: 'bg-lime-100', editable: !readOnly },
-      { field: 'ar_date_of_service', headerName: 'Date of Service', headerClass: 'bg-lime-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
-      { field: 'ar_amount', headerName: 'Amount', headerClass: 'bg-lime-100', valueParser: numberParser, editable: !readOnly },
-      { field: 'ar_date_recorded', headerName: 'Date Recorded', headerClass: 'bg-lime-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: months }, cellClass: 'ag-cell-with-arrow' },
-      { field: 'ar_type', headerName: 'Type', headerClass: 'bg-lime-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Insurance Payment', 'Patient Payment', 'Refund', 'Adjustment', 'Other'] }, cellClass: 'ag-cell-with-arrow' },
-      { field: 'ar_notes', headerName: 'Notes', headerClass: 'bg-lime-100', editable: !readOnly }
-    ];
-    const blueChildren: ColDef[] = [
-      { field: 'description', headerName: 'Description', headerClass: 'bg-blue-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Service Fee', 'Consultation', 'Procedure', 'Follow-up', 'Other'] }, cellClass: 'ag-cell-with-arrow' },
-      { field: 'amount', headerName: 'Amount', headerClass: 'bg-blue-100', valueParser: numberParser, editable: !readOnly },
-      { field: 'notes', headerName: 'Notes', headerClass: 'bg-blue-100', editable: !readOnly }
+      { field: 'status', headerName: 'Claim Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Pending', 'Submitted', 'Paid', 'Denied', 'Under Review', 'Appealed'] }, cellClass: 'ag-cell-with-arrow', width: 120 },
+      { field: 'submit_info', headerName: 'Most Recent Submit Date', headerClass: 'bg-green-100', editable: !readOnly, valueFormatter: (p: any) => {
+        if (!p.value) return '';
+        const d = new Date(p.value);
+        if (isNaN(d.getTime())) return p.value;
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(-2);
+        return `${mm}-${dd}-${yy}`;
+      }, width: 150 },
+      { field: 'insurance_payment', headerName: 'Ins Pay', headerClass: 'bg-green-100', valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', editable: !readOnly, width: 100 },
+      { field: 'insurance_notes', headerName: 'Ins Pay Date', headerClass: 'bg-green-100', editable: !readOnly, valueFormatter: (p: any) => {
+        if (!p.value) return '';
+        const d = new Date(p.value);
+        if (isNaN(d.getTime())) return p.value;
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(-2);
+        return `${mm}-${dd}-${yy}`;
+      }, width: 120 },
+      { field: 'description', headerName: 'PT RES', headerClass: 'bg-green-100', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', width: 100 },
+      { field: 'payment_amount', headerName: 'Collected from PT', headerClass: 'bg-green-100', valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', editable: !readOnly, width: 130 },
+      { field: 'payment_status', headerName: 'PT Pay Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Pending', 'Paid', 'Partial', 'Overdue', 'Waived'] }, cellClass: 'ag-cell-with-arrow', width: 120 },
+      { field: 'claim_number', headerName: 'PT Payment AR Ref Date', headerClass: 'bg-green-100', editable: !readOnly, valueFormatter: (p: any) => {
+        if (!p.value) return '';
+        const d = new Date(p.value);
+        if (isNaN(d.getTime())) return p.value;
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(-2);
+        return `${mm}-${dd}-${yy}`;
+      }, width: 150 },
+      { field: 'amount', headerName: 'Total Pay', headerClass: 'bg-green-100', valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', editable: !readOnly, width: 100 },
+      { field: 'notes', headerName: 'Notes', headerClass: 'bg-green-100', editable: !readOnly, width: 200 }
     ];
 
     const grouped: Array<ColDef | ColGroupDef> = [
       { headerName: 'ADMIN', marryChildren: true, headerClass: 'bg-purple-500 text-white', children: adminChildren },
       { headerName: 'PROVIDER', marryChildren: true, headerClass: 'bg-orange-500 text-white', children: providerChildren },
-      { headerName: 'BILLING', marryChildren: true, headerClass: 'bg-green-600 text-white', children: billingChildren },
-      { headerName: 'ACCOUNTS RECEIVABLE', marryChildren: true, headerClass: 'bg-lime-500 text-white', children: arChildren },
-      { headerName: '', marryChildren: true, headerClass: 'bg-blue-500 text-white', children: blueChildren }
+      { headerName: 'BILLING', marryChildren: true, headerClass: 'bg-green-600 text-white', children: billingChildren }
     ];
     return grouped;
   }, [visibleColumns, readOnly, billingCodes]);

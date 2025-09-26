@@ -1,12 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  FileText, Plus, Edit, Save, X, Search, Filter, 
-  ChevronDown, ChevronRight, Eye, EyeOff, Calendar,
-  DollarSign, CreditCard, AlertCircle, Users, Building2
+  Eye, EyeOff,
+  DollarSign, AlertCircle
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import toast from 'react-hot-toast';
-import BillingInterface from './BillingInterface';
 import BillingGrid from './BillingGrid';
 import PatientDatabase from './PatientDatabase';
 import TodoSystem from './TodoSystem';
@@ -17,16 +13,14 @@ interface EnhancedBillingInterfaceProps {
   providerId?: string;
   clinicId?: string;
   canEdit?: boolean;
-  visibleColumns?: string[];
-  userRole?: string;
+  hideAccountsReceivable?: boolean;
 }
 
 function EnhancedBillingInterface({ 
   providerId, 
   clinicId, 
   canEdit = true, 
-  visibleColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q'],
-  userRole = 'provider'
+  hideAccountsReceivable = false
 }: EnhancedBillingInterfaceProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -137,7 +131,6 @@ function EnhancedBillingInterface({
         providerId={providerId}
         clinicId={clinicId}
         readOnly={!canEdit}
-        visibleColumns={visibleColumns}
         dateRange={computeSelectedMonthDateRange(selectedYear, selectedMonth)}
       />
     </div>
@@ -198,15 +191,6 @@ function EnhancedBillingInterface({
 
   return (
     <div className="space-y-6">
-      {/* Header (calendar removed for provider view) */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-0">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Enhanced Billing Interface</h2>
-            <p className="text-gray-600">Comprehensive billing management with split-screen functionality</p>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content Area */}
       {viewMode === 'single' ? (
@@ -214,36 +198,40 @@ function EnhancedBillingInterface({
           <div className="bg-white rounded-lg shadow">
             {renderBillingInterface()}
           </div>
-          {/* A/R Section - Separate from current month billing */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Accounts Receivable</h3>
-              <p className="text-sm text-gray-600">Track payments for previous months (separate from current month billing)</p>
-            </div>
-            <div className="p-6">
-              <AccountsReceivable
-                clinicId={clinicId}
-                canEdit={canEdit}
-                showMonthlySubcategories={true}
-              />
-            </div>
-          </div>
-          
-          {/* Monthly A/R Subcategories - Track by service month */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Monthly A/R Subcategories</h3>
-              <p className="text-sm text-gray-600">Track payments by service month - payments received in {months[selectedMonth - 1]} for previous months</p>
-            </div>
-            <div className="p-6">
-              <MonthlyAccountsReceivable
-                clinicId={clinicId}
-                canEdit={canEdit}
-                currentMonth={selectedMonth}
-                currentYear={selectedYear}
-              />
-            </div>
-          </div>
+          {!hideAccountsReceivable && (
+            <>
+              {/* A/R Section - Separate from current month billing */}
+              <div className="bg-white rounded-lg shadow">
+                <div className="p-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">Accounts Receivable</h3>
+                  <p className="text-sm text-gray-600">Track payments for previous months (separate from current month billing)</p>
+                </div>
+                <div className="p-6">
+                  <AccountsReceivable
+                    clinicId={clinicId}
+                    canEdit={canEdit}
+                    showMonthlySubcategories={true}
+                  />
+                </div>
+              </div>
+              
+              {/* Monthly A/R Subcategories - Track by service month */}
+              <div className="bg-white rounded-lg shadow">
+                <div className="p-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900">Monthly A/R Subcategories</h3>
+                  <p className="text-sm text-gray-600">Track payments by service month - payments received in {months[selectedMonth - 1]} for previous months</p>
+                </div>
+                <div className="p-6">
+                  <MonthlyAccountsReceivable
+                    clinicId={clinicId}
+                    canEdit={canEdit}
+                    currentMonth={selectedMonth}
+                    currentYear={selectedYear}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

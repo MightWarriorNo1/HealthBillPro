@@ -231,10 +231,6 @@ function ProviderDashboard() {
                     clinicId={user?.clinicId}
                     providerId={user?.providerId}
                     canEdit={true}
-                    userRole={user?.role}
-                    visibleColumns={[
-                      'A','B','C','D','E','F','G','H','I'
-                    ]}
                   />
                 </div>
             </div>
