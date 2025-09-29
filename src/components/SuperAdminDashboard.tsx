@@ -261,7 +261,6 @@ function SuperAdminDashboard() {
                 label: provider.name,
                 icon: UserCheck,
                 children: [
-                  { id: `provider-${provider.id}-dashboard`, label: 'Dashboard', icon: LayoutDashboard },
                   ...years.map(year => ({
                     id: `provider-${provider.id}-year-${year}`,
                     label: `${year}`,
@@ -320,9 +319,10 @@ function SuperAdminDashboard() {
                 setSelectedProvider(null);
                 setActiveTab(item.id);
               } else if (item.id.startsWith('provider-') && !item.id.includes('-year-') && !item.id.includes('-dashboard')) {
-                // This is a provider parent item - toggle its expansion
-                setSelectedProvider(selectedProvider === item.id ? null : item.id);
-                setActiveTab(item.id);
+                // Provider parent: expand and open dashboard directly (no separate submenu)
+                const nextExpanded = selectedProvider === item.id ? null : item.id;
+                setSelectedProvider(nextExpanded);
+                setActiveTab(`${item.id}-dashboard`);
               } else {
                 setActiveTab(item.id);
                 setSelectedClinic(null);

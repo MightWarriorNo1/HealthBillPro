@@ -100,6 +100,8 @@ interface BillingGridProps {
   readOnly?: boolean;
   visibleColumns?: string[];
   dateRange?: { start: string; end: string };
+  highlightOnly?: boolean;
+  lockedColumns?: string[];
 }
 
 type Entry = {
@@ -138,7 +140,7 @@ type Entry = {
 
 const NUMBER_COLS = new Set(['amount', 'insurance_payment', 'payment_amount', 'copay', 'coinsurance', 'ar_amount']);
 
-export default function BillingGrid({ clinicId, providerId, readOnly, visibleColumns, dateRange }: BillingGridProps) {
+export default function BillingGrid({ clinicId, providerId, readOnly, visibleColumns, dateRange, highlightOnly, lockedColumns }: BillingGridProps) {
   const [rowData, setRowData] = useState<Entry[]>([]);
   const [, setLoading] = useState(false);
   const [billingCodes, setBillingCodes] = useState<string[]>([]);
@@ -157,6 +159,27 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   const [columnSizingInfo, setColumnSizingInfo] = useState<any>({});
   
   const columnHelper = createColumnHelper<Entry>();
+  const isColumnLocked = (columnId: string): boolean => {
+    if (!lockedColumns || lockedColumns.length === 0) return false;
+    return lockedColumns.includes(columnId);
+  };
+  const canEditCell = (columnId: string): boolean => {
+    return !readOnly && !highlightOnly && !isColumnLocked(columnId);
+  };
+
+  // Allow native browser Find (Ctrl/Cmd+F) to work by exiting edit mode
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isFind = (e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F');
+      if (isFind) {
+        // End any active cell editing so visible text can be searched
+        if (editingCell) setEditingCell(null);
+        // Do not preventDefault; let browser handle Find
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editingCell]);
 
   // Color maps for select options
   const getOptionColor = (fieldId: string, option: string): string => {
@@ -204,27 +227,29 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     return '#111827'; // default gray-900
   };
 
-  const hexToRgba = (hex: string, alpha: number): string => {
-    const clean = hex.replace('#', '');
-    const bigint = parseInt(clean.length === 3
-      ? clean.split('').map(c => c + c).join('')
-      : clean, 16);
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
-    const b = bigint & 255;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  const getOptionBgStyle = (fieldId: string, option: string): { backgroundColor: string; color: string } => {
+    const lower = String(option || '').toLowerCase();
+    let bg = '#E5E7EB';
+    let fg = '#111827';
+    if (fieldId === 'status') {
+      if (lower === 'approved' || lower === 'paid') { bg = '#16a34a'; fg = '#ffffff'; }
+      else if (lower === 'rejected') { bg = '#dc2626'; fg = '#ffffff'; }
+      else if (lower === 'pending') { bg = '#f59e0b'; fg = '#111827'; }
+    } else if (fieldId === 'payment_status') {
+      if (lower === 'paid') { bg = '#16a34a'; fg = '#ffffff'; }
+      else if (lower === 'cc declined') { bg = '#dc2626'; fg = '#ffffff'; }
+      else if (lower === 'secondary') { bg = '#2563eb'; fg = '#ffffff'; }
+      else if (lower === 'payment plan') { bg = '#7c3aed'; fg = '#ffffff'; }
+      else if (lower === 'collections') { bg = '#b91c1c'; fg = '#ffffff'; }
+      else if (lower === 'refunded') { bg = '#0ea5e9'; fg = '#0b1c26'; }
+      else if (lower === 'waiting on claims') { bg = '#f59e0b'; fg = '#111827'; }
+    }
+    return { backgroundColor: bg, color: fg };
   };
 
-  const getOptionBadgeStyles = (fieldId: string, option: string) => {
-    const color = getOptionColor(fieldId, option);
-    return {
-      color: '#ffffff',
-      backgroundColor: hexToRgba(color, 0.9),
-      padding: '2px 8px',
-      borderRadius: '9999px',
-      display: 'inline-block'
-    } as React.CSSProperties;
-  };
+  // Removed unused hexToRgba helper
+
+  // Reserved for future styling; remove if unused
 
   const loadRows = async () => {
     setLoading(true);
@@ -329,6 +354,8 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
 
   const updateCellValue = async (rowId: string, columnId: string, value: any) => {
     if (String(rowId).startsWith('placeholder-')) return;
+    if (highlightOnly) return;
+    if (isColumnLocked(columnId)) return;
     
     const field = columnId;
     let processedValue = NUMBER_COLS.has(field) ? Number(value || 0) : value;
@@ -367,8 +394,8 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         throw error;
       }
       
-      // Update local state
-      setRowData(prev => prev.map(row => row.id === rowId ? { ...row, ...updates } : row));
+      // Update local state (normalize id equality for string/number ids)
+      setRowData(prev => prev.map(row => String(row.id) === String(rowId) ? { ...row, ...updates } : row));
     } catch (error) {
       console.error('Failed to update billing entry:', error);
     }
@@ -381,7 +408,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="text"
               defaultValue={value || ''}
@@ -400,7 +427,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {value}
             </div>
           );
@@ -411,7 +438,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="text"
               defaultValue={value || ''}
@@ -430,7 +457,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {value}
             </div>
           );
@@ -441,7 +468,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="text"
               defaultValue={value || ''}
@@ -460,7 +487,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {value}
             </div>
           );
@@ -471,7 +498,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="text"
               defaultValue={value || ''}
@@ -490,7 +517,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {value}
             </div>
           );
@@ -501,7 +528,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="number"
               step="0.01"
@@ -521,7 +548,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -532,7 +559,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="number"
               step="0.01"
@@ -552,7 +579,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -572,7 +599,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
             return `${mm}-${dd}-${yy}`;
           })() : '';
           
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="date"
               defaultValue={value ? new Date(value).toISOString().split('T')[0] : ''}
@@ -591,7 +618,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {formattedValue}
             </div>
           );
@@ -603,7 +630,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
           
-          if (isEditing && !readOnly) {
+          if (isEditing && canEditCell(id)) {
             return (
               <div className="relative">
                 <MultiSelectCellEditor
@@ -626,7 +653,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               : value || '';
               
           return (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {displayValue}
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -640,7 +667,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           const value = getValue() as any;
           const options = ['Scheduled','Complete','PP Complete','Charge NS/LC','RS No Charge','NS No Charge','Note not complete'];
           
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <div className="relative">
               <select
                 defaultValue={value || ''}
@@ -663,7 +690,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               <span style={{ color: getOptionColor('appointment_status', value) }}>{value}</span>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -677,11 +704,12 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           const value = getValue() as any;
           const options = ['pending','approved','paid','rejected'];
           
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <div className="relative">
               <select
                 defaultValue={value || ''}
-                className="w-full h-full border-none outline-none px-2 py-1 bg-white appearance-none pr-6"
+                className="w-full h-full border-none outline-none px-2 py-1 appearance-none pr-6 rounded"
+                style={getOptionBgStyle('status', value)}
                 onBlur={async (e) => {
                   await updateCellValue(row.original.id, id, e.target.value);
                   setEditingCell(null);
@@ -694,15 +722,15 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               >
                 <option value="">Select...</option>
                 {options.map(option => (
-                  <option key={option} value={option} style={{ color: getOptionColor('status', option) }}>{option}</option>
+                  <option key={option} value={option} style={getOptionBgStyle('status', option)}>{option}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-200 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
-              <span style={{ color: getOptionColor('status', value) }}>{value}</span>
-              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              <div className="px-2 py-1 rounded text-center" style={getOptionBgStyle('status', value)}>{value || ''}</div>
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
             </div>
           );
         },
@@ -713,18 +741,10 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          const formattedValue = value ? (() => {
-            const d = new Date(value);
-            if (isNaN(d.getTime())) return value;
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const dd = String(d.getDate()).padStart(2, '0');
-            const yy = String(d.getFullYear()).slice(-2);
-            return `${mm}-${dd}-${yy}`;
-          })() : '';
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
-              type="date"
-              defaultValue={value ? new Date(value).toISOString().split('T')[0] : ''}
+              type="text"
+              defaultValue={value || ''}
               className="w-full h-full border-none outline-none px-2 py-1"
               onBlur={async (e) => {
                 await updateCellValue(row.original.id, id, e.target.value);
@@ -740,8 +760,8 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
-              {formattedValue}
+            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {value || ''}
             </div>
           );
         },
@@ -751,7 +771,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="number"
               step="0.01"
@@ -771,7 +791,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -784,7 +804,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           const value = getValue() as any;
           const options = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
           
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <div className="relative">
               <select
                 defaultValue={value || ''}
@@ -807,7 +827,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               <span style={{ color: getOptionColor('insurance_notes', value) }}>{value}</span>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -819,7 +839,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="number"
               step="0.01"
@@ -839,7 +859,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -850,7 +870,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="number"
               step="0.01"
@@ -870,7 +890,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -883,11 +903,12 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           const value = getValue() as any;
           const options = ['Paid','CC declined','Secondary','Payment Plan','Collections','Refunded','Waiting on Claims'];
           
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <div className="relative">
               <select
                 defaultValue={value || ''}
-                className="w-full h-full border-none outline-none px-2 py-1 bg-white appearance-none pr-6"
+                className="w-full h-full border-none outline-none px-2 py-1 appearance-none pr-6 rounded"
+                style={getOptionBgStyle('payment_status', value)}
                 onBlur={async (e) => {
                   await updateCellValue(row.original.id, id, e.target.value);
                   setEditingCell(null);
@@ -900,15 +921,15 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               >
                 <option value="">Select...</option>
                 {options.map(option => (
-                  <option key={option} value={option} style={{ color: getOptionColor('payment_status', option) }}>{option}</option>
+                  <option key={option} value={option} style={getOptionBgStyle('payment_status', option)}>{option}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-200 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
-              <span style={{ color: getOptionColor('payment_status', value) }}>{value}</span>
-              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              <div className="px-2 py-1 rounded text-center" style={getOptionBgStyle('payment_status', value)}>{value || ''}</div>
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
             </div>
           );
         },
@@ -920,7 +941,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           const value = getValue() as any;
           const options = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
           
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <div className="relative">
               <select
                 defaultValue={value || ''}
@@ -943,7 +964,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               <span style={{ color: getOptionColor('claim_number', value) }}>{value}</span>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -955,7 +976,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="number"
               step="0.01"
@@ -975,7 +996,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -986,7 +1007,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
         cell: ({ getValue, row, column: { id } }) => {
           const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
           const value = getValue() as any;
-          return isEditing && !readOnly ? (
+          return isEditing && canEditCell(id) ? (
             <input
               type="text"
               defaultValue={value || ''}
@@ -1005,7 +1026,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
               {value}
             </div>
           );
@@ -1041,7 +1062,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     }
 
     return cols;
-  }, [billingCodes, editingCell, readOnly]);
+  }, [billingCodes, editingCell, readOnly, highlightOnly, lockedColumns]);
 
   const table = useReactTable({
     data: rowData,
@@ -1074,6 +1095,44 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       setSelectedRowIds(selectedIds);
     },
   });
+
+  // Header color styles to match the provided image
+  const getHeaderCellStyle = (columnId: string): React.CSSProperties => {
+    // Choose background/text colors per column id
+    const styles: Record<string, { bg: string; fg: string }> = {
+      // Purple group
+      id: { bg: '#6B5B95', fg: '#FFFFFF' },
+      patient_name: { bg: '#6B5B95', fg: '#FFFFFF' },
+      last_initial: { bg: '#6B5B95', fg: '#FFFFFF' },
+      insurance: { bg: '#6B5B95', fg: '#FFFFFF' },
+      copay: { bg: '#6B5B95', fg: '#FFFFFF' },
+      coinsurance: { bg: '#6B5B95', fg: '#FFFFFF' },
+      date: { bg: '#6B5B95', fg: '#FFFFFF' },
+      // Orange group
+      procedure_code: { bg: '#D97706', fg: '#FFFFFF' },
+      appointment_status: { bg: '#D97706', fg: '#FFFFFF' },
+      // Dark/green group
+      status: { bg: '#065F46', fg: '#FFFFFF' },
+      submit_info: { bg: '#064E3B', fg: '#FFFFFF' },
+      insurance_payment: { bg: '#10B981', fg: '#0B2416' },
+      insurance_notes: { bg: '#86EFAC', fg: '#052e1e' },
+      description: { bg: '#A7F3D0', fg: '#052e1e' },
+      // Lavender/purple group for PT
+      payment_amount: { bg: '#C4B5FD', fg: '#1F1147' },
+      payment_status: { bg: '#DDD6FE', fg: '#1F1147' },
+      // Green for totals and AR ref date
+      claim_number: { bg: '#86EFAC', fg: '#052e1e' },
+      amount: { bg: '#22C55E', fg: '#052e1e' },
+      // Purple for notes
+      notes: { bg: '#6B5B95', fg: '#FFFFFF' },
+    };
+    const s = styles[columnId];
+    if (!s) return {};
+    return {
+      backgroundColor: s.bg,
+      color: s.fg,
+    } as React.CSSProperties;
+  };
 
   // Paste functionality simplified for TanStack Table
   const copySelection = () => {
@@ -1180,14 +1239,19 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
 
   return (
     <div className="space-y-3">
-      {!readOnly && (
+      {(!readOnly || highlightOnly) && (
         <div className="flex items-center gap-2">
-          <label className="px-3 py-2 bg-gray-800 rounded cursor-pointer hover:bg-gray-200">
-            Import XLSX
-            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files && importXlsx(e.target.files[0])} />
-          </label>
-          <button className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700" onClick={() => { setShowBulk(true); setBulkDate(new Date().toISOString().split('T')[0]); }}>Paste Patient IDs</button>
-          <div className="mx-2 h-6 w-px bg-gray-300" />
+          {!highlightOnly && (
+            <>
+              <label className="px-3 py-2 bg-gray-800 rounded cursor-pointer hover:bg-gray-200">
+                Import XLSX
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files && importXlsx(e.target.files[0])} />
+              </label>
+              <button className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700" onClick={() => { setShowBulk(true); setBulkDate(new Date().toISOString().split('T')[0]); }}>Paste Patient IDs</button>
+              <div className="mx-2 h-6 w-px bg-gray-300" />
+            </>
+          )}
+          {!highlightOnly && (
           <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={async () => {
             const { data: inserted } = await supabase
               .from('billing_entries')
@@ -1217,13 +1281,59 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               await loadRows();
             }
           }}>Add Row</button>
-          <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={() => addRowRelative('above')}>Add Row Above</button>
-          <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={() => addRowRelative('below')}>Add Row Below</button>
-          <button className="px-3 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200" onClick={deleteSelectedRows}>Delete Row(s)</button>
-          <div className="mx-2 h-6 w-px bg-gray-300" />
+          )}
+          {!highlightOnly && (
+            <>
+              <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={() => addRowRelative('above')}>Add Row Above</button>
+              <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={() => addRowRelative('below')}>Add Row Below</button>
+              <button className="px-3 py-2 bg-red-100 text-red-800 rounded hover:bg-red-200" onClick={deleteSelectedRows}>Delete Row(s)</button>
+              <div className="mx-2 h-6 w-px bg-gray-300" />
+            </>
+          )}
           <button className="px-3 py-2 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200" onClick={toggleHighlightSelected}>Highlight</button>
           <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={copySelection}>Copy</button>
           <span className="text-xs text-gray-500">Paste with Ctrl+V</span>
+
+        </div>
+      )}
+      {/* Column visibility toolbar below actions, above table */}
+      {(!readOnly || highlightOnly) && (
+        <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap">
+          <span className="text-xs text-gray-500">Columns:</span>
+          {table.getAllLeafColumns().map((col) => {
+            const headerLabel = String((col.columnDef as any).header || col.id || '');
+            const visible = col.getIsVisible();
+            return (
+              <button
+                key={col.id}
+                className={`px-2 py-1 rounded text-xs border ${visible ? 'bg-white text-gray-800 hover:bg-gray-100' : 'bg-gray-100 text-gray-500 line-through'}`}
+                title={`Toggle ${headerLabel}`}
+                onClick={() => col.toggleVisibility(!visible)}
+              >
+                {headerLabel}
+              </button>
+            );
+          })}
+          <button
+            className="px-2 py-1 rounded text-xs border bg-white text-gray-800 hover:bg-gray-100"
+            onClick={() => {
+              const next: Record<string, boolean> = {};
+              table.getAllLeafColumns().forEach(c => { next[c.id] = false; });
+              setColumnVisibility(next);
+            }}
+          >
+            Hide All
+          </button>
+          <button
+            className="px-2 py-1 rounded text-xs border bg-white text-gray-800 hover:bg-gray-100"
+            onClick={() => {
+              const next: Record<string, boolean> = {};
+              table.getAllLeafColumns().forEach(c => { next[c.id] = true; });
+              setColumnVisibility(next);
+            }}
+          >
+            Show All
+          </button>
         </div>
       )}
       <div className="overflow-auto border border-gray-300" style={{ height: 520, width: '100%' }}>
@@ -1235,7 +1345,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
                   <th
                     key={header.id}
                     className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 relative"
-                    style={{ width: header.getSize() }}
+                    style={{ ...getHeaderCellStyle(header.column.id), width: header.getSize() }}
                   >
                     <div
                       className={header.column.getCanSort() ? 'cursor-pointer select-none hover:bg-gray-100' : ''}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, Users, Calendar, ChevronRight
+  LayoutDashboard, Calendar, ChevronRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -17,12 +17,8 @@ interface MenuItem {
 function ProviderDashboard() {
   const { user } = useAuth();
   const { 
-    clinics, 
-    providers,
     patients, 
     billingEntries, 
-    todoItems, 
-    accountsReceivable,
     loading,
     error 
   } = useData();
@@ -67,7 +63,7 @@ function ProviderDashboard() {
     });
   }, [user, patients, billingEntries]);
 
-  const userClinic = clinics.find(c => c.id === user?.clinicId);
+  
 
   const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -176,29 +172,6 @@ function ProviderDashboard() {
               </div>
               </div>
             </div>
-
-            {/* Quick Actions (limited for providers) */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h4 className="font-medium text-gray-900 mb-4">Quick Actions</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <button
-                  onClick={() => {
-                    const now = new Date();
-                    const monAbbr = now.toLocaleString('en-US', { month: 'short' }).toLowerCase();
-                    const year = now.getFullYear();
-                    const id = `month-${monAbbr}-${year}`;
-                    setActiveTab(id);
-                    const monthMap: Record<string, number> = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
-                    const monthNum = monthMap[monAbbr];
-                    window.dispatchEvent(new CustomEvent('billing:select-month', { detail: { month: monthNum, year } }));
-                  }}
-                  className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
-                >
-                  <Calendar className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-green-900">Current Month</p>
-                </button>
-              </div>
-            </div>
           </div>
         );
       default:
@@ -236,6 +209,37 @@ function ProviderDashboard() {
             </div>
           </div>
         );
+        }
+        // Handle year-specific tabs
+        if (activeTab.startsWith('year-')) {
+          const yearStr = activeTab.replace('year-', '');
+          const yearNum = parseInt(yearStr || `${new Date().getFullYear()}`, 10);
+          if (yearNum) {
+            // Ensure data view components sync to selected year (e.g., EnhancedBillingInterface)
+            window.dispatchEvent(new CustomEvent('billing:select-year', { detail: { year: yearNum } }));
+          }
+
+          return (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow">
+                <div className="px-6 py-4 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {yearNum || new Date().getFullYear()} Billing Data
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Your billing entries for the selected year
+                    </p>
+                </div>
+                <div className="p-6">
+                    <EnhancedBillingInterface
+                      clinicId={user?.clinicId}
+                      providerId={user?.providerId}
+                      canEdit={true}
+                    />
+                  </div>
+              </div>
+            </div>
+          );
         }
         return null;
     }

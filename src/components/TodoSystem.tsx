@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Plus, X, Search, User, Calendar
+  X, Search, User, Calendar
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -36,6 +36,7 @@ function TodoSystem({ clinicId, canEdit = true }: TodoSystemProps) {
   const [todoNotes, setTodoNotes] = useState<TodoNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [idFilter, setIdFilter] = useState('');
   const [showAddItem, setShowAddItem] = useState(false);
   const [selectedItem, setSelectedItem] = useState<TodoItem | null>(null);
   const [newNote, setNewNote] = useState('');
@@ -168,6 +169,15 @@ function TodoSystem({ clinicId, canEdit = true }: TodoSystemProps) {
             />
           </div>
         </div>
+        <div>
+          <input
+            type="text"
+            placeholder="Filter ID..."
+            value={idFilter}
+            onChange={(e) => setIdFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-800"
+          />
+        </div>
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
@@ -195,6 +205,7 @@ function TodoSystem({ clinicId, canEdit = true }: TodoSystemProps) {
           clinicId={clinicId}
           canEdit={canEdit}
           searchText={searchTerm}
+          filterId={idFilter}
           filterStatus={filterStatus}
           showCompleted={showCompleted}
           onSelectItem={(row) => {
