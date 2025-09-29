@@ -45,6 +45,14 @@ export interface DatabaseBillingEntry {
   status: 'pending' | 'approved' | 'paid' | 'rejected';
   claim_number?: string;
   notes?: string;
+  patient_id?: string;
+  insurance?: string;
+  copay?: number;
+  coinsurance?: number;
+  appointment_status?: string;
+  submit_info?: string;
+  insurance_payment?: number;
+  insurance_notes?: string;
   created_at: string;
   updated_at: string;
 }

@@ -1,14 +1,98 @@
-import { useMemo, useRef, useState, useEffect } from 'react';
-import { DollarSign } from 'lucide-react';
-import { AgGridReact } from 'ag-grid-react';
-import { ColDef, ColGroupDef, GridApi, GridOptions, ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
-import 'ag-grid-community/styles/ag-grid.css';
-import 'ag-grid-community/styles/ag-theme-alpine.css';
+import { useMemo, useState, useEffect } from 'react';
+import { DollarSign, ChevronDown } from 'lucide-react';
+import {
+  createColumnHelper,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  SortingState,
+  ColumnFiltersState,
+  VisibilityState,
+} from '@tanstack/react-table';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 
-// Register AG Grid Community modules (required from v34+)
-ModuleRegistry.registerModules([AllCommunityModule]);
+// Custom Multi-Select Cell Editor Component
+interface MultiSelectCellEditorProps {
+  value: string[] | string;
+  options: string[];
+  onSave: (value: string[]) => void;
+}
+
+function MultiSelectCellEditor({ value, options, onSave }: MultiSelectCellEditorProps) {
+  const [selectedValues, setSelectedValues] = useState<string[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (value) {
+      if (Array.isArray(value)) {
+        setSelectedValues([...value]);
+      } else if (typeof value === 'string') {
+        setSelectedValues(value.split(',').map(v => v.trim()).filter(v => v));
+      }
+    } else {
+      setSelectedValues([]);
+    }
+  }, [value]);
+
+  const handleOptionChange = (option: string, checked: boolean) => {
+    if (checked) {
+      if (!selectedValues.includes(option)) {
+        setSelectedValues([...selectedValues, option]);
+      }
+    } else {
+      setSelectedValues(selectedValues.filter(v => v !== option));
+    }
+  };
+
+  const handleDone = () => {
+    onSave(selectedValues);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        readOnly
+        value={selectedValues.length === 0 ? 'Select CPT codes...' : selectedValues.join(', ')}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full h-full border-none outline-none px-2 py-1 cursor-pointer ${selectedValues.length === 0 ? 'text-gray-500' : 'text-black'}`}
+      />
+      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+      
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 bg-white border-2 border-blue-500 rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
+          <div className="max-h-56 overflow-y-auto">
+            {options.map((option) => (
+            <div
+              key={option}
+                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
+                onClick={() => handleOptionChange(option, !selectedValues.includes(option))}
+            >
+              <input
+                type="checkbox"
+                checked={selectedValues.includes(option)}
+                  onChange={() => {}}
+                  onClick={(e) => e.stopPropagation()}
+                  className="m-0"
+                />
+                <span className="flex-1 text-black">{option}</span>
+            </div>
+          ))}
+          </div>
+          <button
+            onClick={handleDone}
+            className="w-full px-3 py-2 bg-blue-500 text-white text-center font-bold hover:bg-blue-600 rounded-b-md"
+          >
+            Done
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface BillingGridProps {
   clinicId?: string;
@@ -24,7 +108,7 @@ type Entry = {
   clinic_id: string;
   date: string;
   patient_name: string;
-  procedure_code: string;
+  procedure_code: string | string[];
   description: string;
   amount: number;
   status: string;
@@ -55,7 +139,6 @@ type Entry = {
 const NUMBER_COLS = new Set(['amount', 'insurance_payment', 'payment_amount', 'copay', 'coinsurance', 'ar_amount']);
 
 export default function BillingGrid({ clinicId, providerId, readOnly, visibleColumns, dateRange }: BillingGridProps) {
-  const gridApiRef = useRef<GridApi | null>(null);
   const [rowData, setRowData] = useState<Entry[]>([]);
   const [, setLoading] = useState(false);
   const [billingCodes, setBillingCodes] = useState<string[]>([]);
@@ -64,6 +147,84 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [bulkDate, setBulkDate] = useState<string>('');
+  
+  // TanStack Table states
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
+  const [columnSizing, setColumnSizing] = useState<Record<string, number>>({});
+  const [columnSizingInfo, setColumnSizingInfo] = useState<any>({});
+  
+  const columnHelper = createColumnHelper<Entry>();
+
+  // Color maps for select options
+  const getOptionColor = (fieldId: string, option: string): string => {
+    const lower = String(option || '').toLowerCase();
+    if (fieldId === 'status') {
+      if (lower === 'approved' || lower === 'paid') return '#16a34a'; // green-600
+      if (lower === 'rejected') return '#dc2626'; // red-600
+      if (lower === 'pending') return '#d97706'; // amber-600
+    }
+    if (fieldId === 'payment_status') {
+      if (lower === 'paid') return '#16a34a';
+      if (lower === 'cc declined') return '#dc2626';
+      if (lower === 'secondary') return '#2563eb';
+      if (lower === 'payment plan') return '#7c3aed';
+      if (lower === 'collections') return '#b91c1c';
+      if (lower === 'refunded') return '#0ea5e9';
+      if (lower === 'waiting on claims') return '#d97706';
+    }
+    if (fieldId === 'appointment_status') {
+      if (lower === 'scheduled') return '#2563eb';
+      if (lower === 'complete' || lower === 'pp complete') return '#16a34a';
+      if (lower.includes('no charge')) return '#6b7280';
+      if (lower === 'charge ns/lc') return '#b91c1c';
+      if (lower === 'note not complete') return '#d97706';
+    }
+    // Months (insurance_notes, claim_number when used as month)
+    // Shared month colors to match Billing Date chips
+    const monthPalette: Record<string, string> = {
+      january: '#ef4444',   // red-500
+      february: '#3b82f6',  // blue-500
+      march: '#f59e0b',     // amber-500
+      april: '#22c55e',     // green-500
+      may: '#10b981',       // emerald-500
+      june: '#0ea5e9',      // sky-500
+      july: '#2563eb',      // indigo/blue-600
+      august: '#38bdf8',    // sky-400
+      september: '#7c3aed', // violet-600
+      october: '#a855f7',   // purple-500
+      november: '#9333ea',  // purple-600
+      december: '#6b7280',  // gray-500
+    };
+    if (fieldId === 'insurance_notes' || fieldId === 'claim_number') {
+      return monthPalette[lower] || '#111827';
+    }
+    return '#111827'; // default gray-900
+  };
+
+  const hexToRgba = (hex: string, alpha: number): string => {
+    const clean = hex.replace('#', '');
+    const bigint = parseInt(clean.length === 3
+      ? clean.split('').map(c => c + c).join('')
+      : clean, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
+
+  const getOptionBadgeStyles = (fieldId: string, option: string) => {
+    const color = getOptionColor(fieldId, option);
+    return {
+      color: '#ffffff',
+      backgroundColor: hexToRgba(color, 0.9),
+      padding: '2px 8px',
+      borderRadius: '9999px',
+      display: 'inline-block'
+    } as React.CSSProperties;
+  };
 
   const loadRows = async () => {
     setLoading(true);
@@ -76,8 +237,17 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       const { data, error } = await q;
       if (error) throw error;
       const rows = (data as unknown as Entry[]) || [];
+      
+      // Process rows to handle procedure_code arrays
+      const processedRows = rows.map(row => ({
+        ...row,
+        procedure_code: row.procedure_code && typeof row.procedure_code === 'string' && row.procedure_code.includes(',') 
+          ? row.procedure_code.split(',').map(code => code.trim()).filter(code => code.length > 0)
+          : row.procedure_code
+      }));
+      
       // Pad with placeholders to always render 200 rows
-      const padded: Entry[] = rows.slice(0);
+      const padded: Entry[] = processedRows.slice(0);
       for (let i = rows.length; i < 200; i++) {
         padded.push({
           id: `placeholder-${i}`,
@@ -157,216 +327,24 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     })();
   }, []);
 
-  const numberParser = (params: any) => {
-    const v = parseFloat(params.newValue);
-    return Number.isFinite(v) ? v : 0;
-  };
-
-  const columnDefs: Array<ColDef | ColGroupDef> = useMemo(() => {
-    const defs: Array<[string, ColDef]> = [
-      ['patient_name', { headerName: 'Patient Name', editable: !readOnly }],
-      ['procedure_code', { 
-        headerName: 'Procedure Code', 
-        editable: !readOnly, 
-        cellEditor: 'agSelectCellEditor', 
-        cellEditorParams: { 
-          values: billingCodes,
-          cellEditorPopup: true
-        },
-        cellClass: 'ag-cell-with-arrow'
-      }],
-      ['description', { headerName: 'Description', editable: !readOnly }],
-      ['amount', { headerName: 'Amount', editable: !readOnly, valueParser: numberParser }],
-      ['date', { headerName: 'Date', editable: !readOnly, valueFormatter: (p: any) => {
-        if (!p.value) return '';
-        const d = new Date(p.value);
-        if (isNaN(d.getTime())) return p.value;
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        return `${mm}-${dd}-${yy}`;
-      }}],
-      ['status', { 
-        headerName: 'Claim Status', 
-        editable: !readOnly, 
-        cellEditor: 'agSelectCellEditor', 
-        cellEditorParams: { 
-          values: ['Claim Sent','RS','IP','Paid','Denial','Rejection','No Coverage','PP','Deductible','N/A','pending','approved','rejected'],
-          cellEditorPopup: true
-        },
-        cellClass: 'ag-cell-with-arrow'
-      }],
-      ['claim_number', { headerName: 'Claim #', editable: !readOnly }],
-      ['notes', { headerName: 'Notes', editable: !readOnly }],
-      ['appointment_status', { 
-        headerName: 'Appt Status', 
-        editable: !readOnly, 
-        cellEditor: 'agSelectCellEditor', 
-        cellEditorParams: { 
-          values: ['Complete','PP Complete','Charge NS/LC','RS No Charge','NS No Charge','Note not complete'],
-          cellEditorPopup: true
-        },
-        cellClass: 'ag-cell-with-arrow'
-      }],
-      ['submit_info', { headerName: 'Submit Info', editable: !readOnly, valueFormatter: (p: any) => {
-        // If value looks like a date, show MM-DD, else raw
-        if (!p.value) return '';
-        const d = new Date(p.value);
-        if (isNaN(d.getTime())) return p.value;
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${mm}-${dd}`;
-      }}],
-       ['insurance_payment', { headerName: 'Ins. Payment', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => {
-         if (!p.value) return '';
-         const d = new Date(p.value);
-         if (isNaN(d.getTime())) return p.value;
-         const month = d.toLocaleString('en-US', { month: 'short' });
-         return month;
-       }, cellClass: (p: any) => {
-         if (!p.value) return '';
-         const d = new Date(p.value);
-         if (isNaN(d.getTime())) return '';
-         const m = d.getMonth();
-         const colors = ['bg-red-50 text-red-700', 'bg-pink-50 text-pink-700', 'bg-orange-50 text-orange-700', 'bg-lime-50 text-lime-700', 'bg-emerald-50 text-emerald-700', 'bg-cyan-50 text-cyan-700', 'bg-blue-50 text-blue-700', 'bg-indigo-50 text-indigo-700', 'bg-violet-50 text-violet-700', 'bg-fuchsia-50 text-fuchsia-700', 'bg-purple-50 text-purple-700', 'bg-slate-50 text-slate-700'];
-         return `ag-cell inline-flex items-center justify-center rounded ${colors[m] || ''}`;
-       }}],
-       ['insurance_notes', { headerName: 'Ins. Notes', editable: !readOnly }],
-       ['payment_amount', { headerName: 'Pt Payment', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => {
-         if (!p.value) return '';
-         const d = new Date(p.value);
-         if (isNaN(d.getTime())) return p.value;
-         const month = d.toLocaleString('en-US', { month: 'short' });
-         return month;
-       }, cellClass: (p: any) => {
-         if (!p.value) return '';
-         const d = new Date(p.value);
-         if (isNaN(d.getTime())) return '';
-         const m = d.getMonth();
-         const colors = ['bg-red-50 text-red-700', 'bg-pink-50 text-pink-700', 'bg-orange-50 text-orange-700', 'bg-lime-50 text-lime-700', 'bg-emerald-50 text-emerald-700', 'bg-cyan-50 text-cyan-700', 'bg-blue-50 text-blue-700', 'bg-indigo-50 text-indigo-700', 'bg-violet-50 text-violet-700', 'bg-fuchsia-50 text-fuchsia-700', 'bg-purple-50 text-purple-700', 'bg-slate-50 text-slate-700'];
-         return `ag-cell inline-flex items-center justify-center rounded ${colors[m] || ''}`;
-       }}],
-      ['payment_status', { headerName: 'Pt Pay Status', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Paid','CC declined','Secondary','Refunded','Payment Plan','Waiting on Claims',''] } }],
-      ['month_tag', { headerName: 'Month', editable: !readOnly, valueFormatter: (p: any) => {
-        const v = String(p.value || '');
-        return v;
-      }, cellClass: (p: any) => {
-        const m = String(p.value || '').toLowerCase();
-        if (!m) return '';
-        const colorMap: Record<string, string> = {
-          jan: 'bg-red-50 text-red-700', feb: 'bg-pink-50 text-pink-700', mar: 'bg-orange-50 text-orange-700',
-          apr: 'bg-lime-50 text-lime-700', may: 'bg-emerald-50 text-emerald-700', jun: 'bg-cyan-50 text-cyan-700',
-          jul: 'bg-blue-50 text-blue-700', aug: 'bg-indigo-50 text-indigo-700', sep: 'bg-violet-50 text-violet-700',
-          oct: 'bg-fuchsia-50 text-fuchsia-700', nov: 'bg-purple-50 text-purple-700', dec: 'bg-slate-50 text-slate-700'
-        };
-        const key = m.slice(0,3);
-        return `ag-cell inline-flex items-center justify-center rounded ${colorMap[key] || ''}`;
-      }}]
-    ];
-
-    const baseCols = defs.map(([field, col]) => ({ field, ...col } as ColDef));
-
-    // Only use individual columns if visibleColumns is explicitly provided and not empty
-    if (visibleColumns && visibleColumns.length > 0) {
-      const map: Record<string, string> = {
-        A: 'patient_name',
-        B: 'procedure_code',
-        C: 'description',
-        D: 'amount',
-        E: 'date',
-        F: 'status',
-        G: 'claim_number',
-        H: 'notes',
-        I: 'appointment_status',
-        J: 'status',
-        K: 'submit_info',
-        L: 'insurance_payment',
-        M: 'insurance_notes',
-        O: 'payment_amount',
-        P: 'payment_status',
-        Q: 'month_tag'
-      };
-      const keep = new Set(visibleColumns.map((c) => map[c] || c));
-      return baseCols.filter((c) => keep.has(String((c as ColDef).field)));
-    }
-    // Grouped headers to match the exact structure from the image
-    const adminChildren: ColDef[] = [
-      { field: 'id', headerName: 'ID', headerClass: 'bg-purple-100', editable: !readOnly, width: 80 },
-      { field: 'patient_name', headerName: 'First Name', headerClass: 'bg-purple-100', editable: !readOnly, width: 120 },
-      { field: 'last_initial', headerName: 'Last Initial', headerClass: 'bg-purple-100', editable: !readOnly, width: 100 },
-      { field: 'insurance', headerName: 'Ins', headerClass: 'bg-purple-100', editable: !readOnly, width: 100 },
-      { field: 'copay', headerName: 'Co-pay', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', width: 100 },
-      { field: 'coinsurance', headerName: 'Co-ins', headerClass: 'bg-purple-100', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', width: 100 },
-      { field: 'date', headerName: 'Date of Service', headerClass: 'bg-purple-100', editable: !readOnly, valueFormatter: (p: any) => {
-        if (!p.value) return '';
-        const d = new Date(p.value);
-        if (isNaN(d.getTime())) return p.value;
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        return `${mm}-${dd}-${yy}`;
-      }, width: 120 }
-    ];
-    const providerChildren: ColDef[] = [
-      { field: 'procedure_code', headerName: 'CPT Code', headerClass: 'bg-orange-100', cellEditor: 'agSelectCellEditor', cellEditorParams: { values: billingCodes }, cellClass: 'ag-cell-with-arrow', editable: !readOnly, width: 100 },
-      { field: 'appointment_status', headerName: 'Appt Status', headerClass: 'bg-orange-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Scheduled', 'Completed', 'Cancelled', 'No Show', 'Rescheduled'] }, cellClass: 'ag-cell-with-arrow', width: 120 }
-    ];
+  const updateCellValue = async (rowId: string, columnId: string, value: any) => {
+    if (String(rowId).startsWith('placeholder-')) return;
     
-    const billingChildren: ColDef[] = [
-      { field: 'status', headerName: 'Claim Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Pending', 'Submitted', 'Paid', 'Denied', 'Under Review', 'Appealed'] }, cellClass: 'ag-cell-with-arrow', width: 120 },
-      { field: 'submit_info', headerName: 'Most Recent Submit Date', headerClass: 'bg-green-100', editable: !readOnly, valueFormatter: (p: any) => {
-        if (!p.value) return '';
-        const d = new Date(p.value);
-        if (isNaN(d.getTime())) return p.value;
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        return `${mm}-${dd}-${yy}`;
-      }, width: 150 },
-      { field: 'insurance_payment', headerName: 'Ins Pay', headerClass: 'bg-green-100', valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', editable: !readOnly, width: 100 },
-      { field: 'insurance_notes', headerName: 'Ins Pay Date', headerClass: 'bg-green-100', editable: !readOnly, valueFormatter: (p: any) => {
-        if (!p.value) return '';
-        const d = new Date(p.value);
-        if (isNaN(d.getTime())) return p.value;
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        return `${mm}-${dd}-${yy}`;
-      }, width: 120 },
-      { field: 'description', headerName: 'PT RES', headerClass: 'bg-green-100', editable: !readOnly, valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', width: 100 },
-      { field: 'payment_amount', headerName: 'Collected from PT', headerClass: 'bg-green-100', valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', editable: !readOnly, width: 130 },
-      { field: 'payment_status', headerName: 'PT Pay Status', headerClass: 'bg-green-100', editable: !readOnly, cellEditor: 'agSelectCellEditor', cellEditorParams: { values: ['Pending', 'Paid', 'Partial', 'Overdue', 'Waived'] }, cellClass: 'ag-cell-with-arrow', width: 120 },
-      { field: 'claim_number', headerName: 'PT Payment AR Ref Date', headerClass: 'bg-green-100', editable: !readOnly, valueFormatter: (p: any) => {
-        if (!p.value) return '';
-        const d = new Date(p.value);
-        if (isNaN(d.getTime())) return p.value;
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        return `${mm}-${dd}-${yy}`;
-      }, width: 150 },
-      { field: 'amount', headerName: 'Total Pay', headerClass: 'bg-green-100', valueParser: numberParser, valueFormatter: (p: any) => p.value ? p.value.toFixed(2) : '0.00', editable: !readOnly, width: 100 },
-      { field: 'notes', headerName: 'Notes', headerClass: 'bg-green-100', editable: !readOnly, width: 200 }
-    ];
-
-    const grouped: Array<ColDef | ColGroupDef> = [
-      { headerName: 'ADMIN', marryChildren: true, headerClass: 'bg-purple-500 text-white', children: adminChildren },
-      { headerName: 'PROVIDER', marryChildren: true, headerClass: 'bg-orange-500 text-white', children: providerChildren },
-      { headerName: 'BILLING', marryChildren: true, headerClass: 'bg-green-600 text-white', children: billingChildren }
-    ];
-    return grouped;
-  }, [visibleColumns, readOnly, billingCodes]);
-
-  const rowClassRules = useMemo(() => ({
-    'bg-yellow-50': (params: any) => highlightedRowIds.has(params.data?.id)
-  }), [highlightedRowIds]);
-
-  const onCellValueChanged: GridOptions['onCellValueChanged'] = async (e) => {
-    if (!e.data || !e.colDef.field) return;
-    if (String((e.data as any).id || '').startsWith('placeholder-')) return;
-    const field = String(e.colDef.field);
-    const value = NUMBER_COLS.has(field) ? Number(e.newValue || 0) : e.newValue;
-    const updates: Record<string, any> = { [field]: value };
+    const field = columnId;
+    let processedValue = NUMBER_COLS.has(field) ? Number(value || 0) : value;
+    
+    // Handle procedure_code field for multiple selections
+    if (field === 'procedure_code' && Array.isArray(value)) {
+      processedValue = value.filter(v => v && v.trim()).join(', ');
+    }
+    
+    const updates: Record<string, any> = { [field]: processedValue };
+    
+    // Handle payment_status field specifically
+    if (field === 'payment_status') {
+      updates.payment_status = value || null;
+    }
+    
     // Auto-lookup by patient ID when user pastes/types numeric ID in patient_name
     try {
       if (field === 'patient_name' && /^\d+$/.test(String(value || ''))) {
@@ -382,36 +360,731 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           updates.coinsurance = p.coinsurance ?? null;
         }
       }
-      await supabase.from('billing_entries').update(updates).eq('id', e.data.id);
-    } catch (_) {
-      await supabase.from('billing_entries').update(updates).eq('id', e.data.id);
+      
+      const { error } = await supabase.from('billing_entries').update(updates).eq('id', rowId);
+      if (error) {
+        console.error('Database update error:', error);
+        throw error;
+      }
+      
+      // Update local state
+      setRowData(prev => prev.map(row => row.id === rowId ? { ...row, ...updates } : row));
+    } catch (error) {
+      console.error('Failed to update billing entry:', error);
     }
   };
 
-  
+  const columns = useMemo(() => {
+    const cols = [
+      columnHelper.accessor('id', {
+        header: 'ID',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="text"
+              defaultValue={value || ''}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, e.target.value);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, e.currentTarget.value);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {value}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('patient_name', {
+        header: 'First Name',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="text"
+              defaultValue={value || ''}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, e.target.value);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, e.currentTarget.value);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {value}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('last_initial', {
+        header: 'Last Initial',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="text"
+              defaultValue={value || ''}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, e.target.value);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, e.currentTarget.value);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {value}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('insurance', {
+        header: 'Ins',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="text"
+              defaultValue={value || ''}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, e.target.value);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, e.currentTarget.value);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {value}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('copay', {
+        header: 'Co-pay',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="number"
+              step="0.01"
+              defaultValue={value || 0}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, parseFloat(e.target.value) || 0);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, parseFloat(e.currentTarget.value) || 0);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('coinsurance', {
+        header: 'Co-ins',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="number"
+              step="0.01"
+              defaultValue={value || 0}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, parseFloat(e.target.value) || 0);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, parseFloat(e.currentTarget.value) || 0);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('date', {
+        header: 'Date of Service',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          const formattedValue = value ? (() => {
+            const d = new Date(value);
+            if (isNaN(d.getTime())) return value;
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const yy = String(d.getFullYear()).slice(-2);
+            return `${mm}-${dd}-${yy}`;
+          })() : '';
+          
+          return isEditing && !readOnly ? (
+            <input
+              type="date"
+              defaultValue={value ? new Date(value).toISOString().split('T')[0] : ''}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, e.target.value);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, e.currentTarget.value);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {formattedValue}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('procedure_code', {
+        header: 'CPT Code',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          
+          if (isEditing && !readOnly) {
+            return (
+              <div className="relative">
+                <MultiSelectCellEditor
+                  value={value}
+                  options={billingCodes}
+                  onSave={async (newValue) => {
+                    await updateCellValue(row.original.id, id, newValue);
+                    setEditingCell(null);
+                  }}
+                />
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+              </div>
+            );
+          }
+          
+          const displayValue = Array.isArray(value) 
+            ? value.join(', ')
+            : (typeof value === 'string' && value.includes(',')) 
+              ? value 
+              : value || '';
+              
+          return (
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {displayValue}
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('appointment_status', {
+        header: 'Appt Status',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          const options = ['Scheduled','Complete','PP Complete','Charge NS/LC','RS No Charge','NS No Charge','Note not complete'];
+          
+          return isEditing && !readOnly ? (
+            <div className="relative">
+              <select
+                defaultValue={value || ''}
+                className="w-full h-full border-none outline-none px-2 py-1 bg-white appearance-none pr-6"
+                onBlur={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                onChange={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                autoFocus
+              >
+                <option value="">Select...</option>
+                {options.map(option => (
+                  <option key={option} value={option} style={{ color: getOptionColor('appointment_status', option) }}>{option}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+          ) : (
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              <span style={{ color: getOptionColor('appointment_status', value) }}>{value}</span>
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('status', {
+        header: 'Claim Status',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          const options = ['pending','approved','paid','rejected'];
+          
+          return isEditing && !readOnly ? (
+            <div className="relative">
+              <select
+                defaultValue={value || ''}
+                className="w-full h-full border-none outline-none px-2 py-1 bg-white appearance-none pr-6"
+                onBlur={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                onChange={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                autoFocus
+              >
+                <option value="">Select...</option>
+                {options.map(option => (
+                  <option key={option} value={option} style={{ color: getOptionColor('status', option) }}>{option}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+          ) : (
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              <span style={{ color: getOptionColor('status', value) }}>{value}</span>
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            </div>
+          );
+        },
+      }),
+      // Inserted to match image: Most Recent Submit Date after Claim Status
+      columnHelper.accessor('submit_info', {
+        header: 'Most Recent Submit Date',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          const formattedValue = value ? (() => {
+            const d = new Date(value);
+            if (isNaN(d.getTime())) return value;
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const yy = String(d.getFullYear()).slice(-2);
+            return `${mm}-${dd}-${yy}`;
+          })() : '';
+          return isEditing && !readOnly ? (
+            <input
+              type="date"
+              defaultValue={value ? new Date(value).toISOString().split('T')[0] : ''}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, e.target.value);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, e.currentTarget.value);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {formattedValue}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('insurance_payment', {
+        header: 'Ins Pay',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="number"
+              step="0.01"
+              defaultValue={value || 0}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, parseFloat(e.target.value) || 0);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, parseFloat(e.currentTarget.value) || 0);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('insurance_notes', {
+        header: 'Ins Pay Date',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          const options = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          
+          return isEditing && !readOnly ? (
+            <div className="relative">
+              <select
+                defaultValue={value || ''}
+                className="w-full h-full border-none outline-none px-2 py-1 bg-white appearance-none pr-6"
+                onBlur={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                onChange={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                autoFocus
+              >
+                <option value="">Select...</option>
+                {options.map(option => (
+                  <option key={option} value={option} style={{ color: getOptionColor('insurance_notes', option) }}>{option}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+          ) : (
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              <span style={{ color: getOptionColor('insurance_notes', value) }}>{value}</span>
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('description', {
+        header: 'PT RES',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="number"
+              step="0.01"
+              defaultValue={value || 0}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, parseFloat(e.target.value) || 0);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, parseFloat(e.currentTarget.value) || 0);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('payment_amount', {
+        header: 'Collected from PT',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="number"
+              step="0.01"
+              defaultValue={value || 0}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, parseFloat(e.target.value) || 0);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, parseFloat(e.currentTarget.value) || 0);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('payment_status', {
+        header: 'PT Pay Status',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          const options = ['Paid','CC declined','Secondary','Payment Plan','Collections','Refunded','Waiting on Claims'];
+          
+          return isEditing && !readOnly ? (
+            <div className="relative">
+              <select
+                defaultValue={value || ''}
+                className="w-full h-full border-none outline-none px-2 py-1 bg-white appearance-none pr-6"
+                onBlur={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                onChange={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                autoFocus
+              >
+                <option value="">Select...</option>
+                {options.map(option => (
+                  <option key={option} value={option} style={{ color: getOptionColor('payment_status', option) }}>{option}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+          ) : (
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              <span style={{ color: getOptionColor('payment_status', value) }}>{value}</span>
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('claim_number', {
+        header: 'PT Payment AR Ref Date',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          const options = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          
+          return isEditing && !readOnly ? (
+            <div className="relative">
+              <select
+                defaultValue={value || ''}
+                className="w-full h-full border-none outline-none px-2 py-1 bg-white appearance-none pr-6"
+                onBlur={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                onChange={async (e) => {
+                  await updateCellValue(row.original.id, id, e.target.value);
+                  setEditingCell(null);
+                }}
+                autoFocus
+              >
+                <option value="">Select...</option>
+                {options.map(option => (
+                  <option key={option} value={option} style={{ color: getOptionColor('claim_number', option) }}>{option}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+          ) : (
+            <div className="px-2 py-1 cursor-pointer relative" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              <span style={{ color: getOptionColor('claim_number', value) }}>{value}</span>
+              <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('amount', {
+        header: 'Total Pay',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="number"
+              step="0.01"
+              defaultValue={value || 0}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, parseFloat(e.target.value) || 0);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, parseFloat(e.currentTarget.value) || 0);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1 text-right" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('notes', {
+        header: 'Notes',
+        cell: ({ getValue, row, column: { id } }) => {
+          const isEditing = editingCell?.rowId === row.original.id && editingCell?.columnId === id;
+          const value = getValue() as any;
+          return isEditing && !readOnly ? (
+            <input
+              type="text"
+              defaultValue={value || ''}
+              className="w-full h-full border-none outline-none px-2 py-1"
+              onBlur={async (e) => {
+                await updateCellValue(row.original.id, id, e.target.value);
+                setEditingCell(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateCellValue(row.original.id, id, e.currentTarget.value);
+                  setEditingCell(null);
+                }
+                if (e.key === 'Escape') setEditingCell(null);
+              }}
+              autoFocus
+            />
+          ) : (
+            <div className="px-2 py-1" onClick={() => !readOnly && setEditingCell({ rowId: row.original.id, columnId: id })}>
+              {value}
+            </div>
+          );
+        },
+      }),
+    ];
 
-  const onPaste = async () => {
-    // AG Grid handles multi-row paste natively; this hook exists for batch persist.
-    // Save dirty rows after a small delay.
-    setTimeout(async () => {
-      const api = gridApiRef.current;
-      if (!api) return;
-      const dirty: Entry[] = [];
-      api.forEachNode((n) => {
-        if (n.data && n.data.__ag_pasted__) dirty.push(n.data);
+    // Apply visible columns filter if specified
+    if (visibleColumns && visibleColumns.length > 0) {
+      const map: Record<string, string> = {
+        A: 'id',
+        B: 'patient_name',
+        C: 'last_initial',
+        D: 'insurance',
+        E: 'copay',
+        F: 'coinsurance',
+        G: 'date',
+        H: 'procedure_code',
+        I: 'appointment_status',
+        J: 'status',
+        K: 'submit_info',
+        L: 'insurance_payment',
+        M: 'insurance_notes',
+        N: 'description',
+        O: 'payment_amount',
+        P: 'payment_status',
+        Q: 'claim_number',
+        R: 'amount',
+        S: 'notes'
+      };
+      const keep = new Set(visibleColumns.map((c) => map[c] || c));
+      return cols.filter((col) => keep.has(col.id || ''));
+    }
+
+    return cols;
+  }, [billingCodes, editingCell, readOnly]);
+
+  const table = useReactTable({
+    data: rowData,
+    columns,
+    state: {
+      sorting,
+      columnFilters,
+      columnVisibility,
+      columnSizing,
+      columnSizingInfo,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
+    onColumnSizingInfoChange: setColumnSizingInfo,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    enableRowSelection: true,
+    enableMultiRowSelection: true,
+    columnResizeMode: 'onChange',
+    onRowSelectionChange: (updaterOrValue) => {
+      const newSelection = typeof updaterOrValue === 'function' ? updaterOrValue({}) : updaterOrValue;
+      const selectedIds = new Set<string>();
+      rowData.forEach((row, index) => {
+        if (newSelection[index]) {
+          selectedIds.add(row.id);
+        }
       });
-      if (dirty.length === 0) return;
-      const updates = dirty.filter(d => !String(d.id || '').startsWith('placeholder-')).map((d) => ({ ...d }));
-      for (const u of updates) {
-        const { id, ...rest } = u as any;
-        await supabase.from('billing_entries').update(rest).eq('id', id);
-      }
-      await loadRows();
-    }, 50);
+      setSelectedRowIds(selectedIds);
+    },
+  });
+
+  // Paste functionality simplified for TanStack Table
+  const copySelection = () => {
+    const selectedRows = rowData.filter(row => selectedRowIds.has(row.id));
+    const copiedText = selectedRows.map(row => 
+      Object.values(row).join('\t')
+    ).join('\n');
+    navigator.clipboard.writeText(copiedText);
   };
 
   const addRowRelative = async (position: 'above' | 'below') => {
-    const api = gridApiRef.current;
     const firstSelectedId = Array.from(selectedRowIds)[0];
     const selected = rowData.find(r => r.id === firstSelectedId) || null;
     const baseDate = selected?.date || null;
@@ -446,10 +1119,7 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
       clone.splice(insertAt, 0, newRow);
       return clone.slice(0, 200);
     });
-    setTimeout(() => {
-      api?.deselectAll();
       setSelectedRowIds(new Set([newRow.id]));
-    }, 0);
   };
 
   const deleteSelectedRows = async () => {
@@ -473,12 +1143,6 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     });
   };
 
-  const copySelection = () => {
-    const api = gridApiRef.current as any;
-    if (!api) return;
-    if (api.copySelectedRangeToClipboard) api.copySelectedRangeToClipboard();
-    else if (api.copySelectedRowsToClipboard) api.copySelectedRowsToClipboard();
-  };
 
   const importXlsx = (file: File) => {
     const reader = new FileReader();
@@ -562,36 +1226,67 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
           <span className="text-xs text-gray-500">Paste with Ctrl+V</span>
         </div>
       )}
-      <div className="ag-theme-alpine" style={{ height: 520, width: '100%' }}>
-        <AgGridReact
-          columnDefs={columnDefs}
-          rowData={rowData}
-          rowClassRules={rowClassRules}
-          undoRedoCellEditing={true}
-          suppressClickEdit={false}
-          readOnlyEdit={!!readOnly}
-          onGridReady={(p) => { gridApiRef.current = p.api; }}
-          onSelectionChanged={(e) => {
-            const ids = new Set<string>();
-            e.api.getSelectedNodes().forEach(n => { if (n.data?.id) ids.add(n.data.id); });
-            setSelectedRowIds(ids);
-          }}
-          onCellValueChanged={onCellValueChanged}
-          onPasteEnd={onPaste}
-          rowSelection={'multiple'}
-          defaultColDef={{ 
-            resizable: true, 
-            sortable: false, 
-            filter: false, 
-            editable: !readOnly,
-            cellStyle: { 
-              borderRight: '1px solid #e5e7eb',
-              borderBottom: '1px solid #e5e7eb',
-              borderLeft: '1px solid #e5e7eb'
-            },
-            headerClass: 'ag-header-cell ag-header-cell-with-border'
-          }}
-        />
+      <div className="overflow-auto border border-gray-300" style={{ height: 520, width: '100%' }}>
+        <table className="w-full table-auto bg-white" style={{ width: table.getTotalSize() }}>
+          <thead className="bg-gray-50 border-b select-none">
+            {table.getHeaderGroups().map(headerGroup => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map(header => (
+                  <th
+                    key={header.id}
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 relative"
+                    style={{ width: header.getSize() }}
+                  >
+                    <div
+                      className={header.column.getCanSort() ? 'cursor-pointer select-none hover:bg-gray-100' : ''}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      {header.column.getCanSort() && (
+                        <span className="ml-1">
+                          {header.column.getIsSorted() === 'asc' ? '↑' :
+                            header.column.getIsSorted() === 'desc' ? '↓' : '↕'}
+                        </span>
+                      )}
+                    </div>
+                    {header.column.getCanResize() && (
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        onClick={(e) => e.stopPropagation()}
+                        className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none bg-transparent hover:bg-gray-300 ${header.column.getIsResizing() ? 'bg-gray-400' : ''}`}
+                      />
+                    )}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {table.getRowModel().rows.map((row) => (
+              <tr
+                key={row.id}
+                className={`hover:bg-gray-50 ${
+                  selectedRowIds.has(row.original.id)
+                    ? 'bg-blue-50'
+                    : highlightedRowIds.has(row.original.id)
+                    ? 'bg-yellow-50'
+                    : ''
+                }`}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td
+                    key={cell.id}
+                    className="px-3 py-2 text-sm text-gray-900 border-r border-gray-200 whitespace-nowrap"
+                    style={{ width: cell.column.getSize() }}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       {/* Totals Footer */}
       <div className="bg-white p-4 rounded-lg shadow flex items-center mt-3">
@@ -677,5 +1372,4 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     </div>
   );
 }
-
 

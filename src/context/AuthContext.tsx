@@ -88,15 +88,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hasInitialized.current = true;
     });
 
-    // Listen for auth changes
+    // Listen for auth changes (including initial session on page load)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state changed:', event, session?.user?.email, 'Email confirmed:', session?.user?.email_confirmed_at);
-      
-      if (event === 'SIGNED_IN' && session?.user) {
+
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
         // Only proceed if email is confirmed
         if (session.user.email_confirmed_at) {
           if (!isLoadingProfile.current) {
-            console.log('Starting profile load for signed in user');
+            console.log('Loading profile due to auth event:', event);
             isLoadingProfile.current = true;
             setLoading(true);
             await loadUserProfile(session.user);
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('Profile already loading, skipping');
           }
         } else {
-          console.log('User signed in but email not confirmed, not authenticating');
+          console.log('Session present but email not confirmed, not authenticating');
           setUser(null);
           setIsAuthenticated(false);
           setLoading(false);
@@ -115,14 +115,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(false);
         setLoading(false);
         isLoadingProfile.current = false;
-      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        // Token was refreshed, ensure user profile is still loaded
-        if (!user && !isLoadingProfile.current) {
-          console.log('Token refreshed, loading profile');
-          isLoadingProfile.current = true;
-          setLoading(true);
-          await loadUserProfile(session.user);
-        }
       } else if (event === 'PASSWORD_RECOVERY') {
         // Handle password recovery
         console.log('Password recovery initiated');
@@ -515,7 +507,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    // Provide a safe fallback to prevent crashes if a component renders
+    // outside of the provider during initialization or HMR.
+    return {
+      user: null,
+      isAuthenticated: false,
+      loading: true,
+      login: async () => ({ success: false, error: 'Auth not initialized' }),
+      signup: async () => ({ success: false, error: 'Auth not initialized' }),
+      logout: async () => {},
+      resetPassword: async () => ({ success: false, error: 'Auth not initialized' }),
+      updatePassword: async () => ({ success: false, error: 'Auth not initialized' }),
+      refreshSession: async () => ({ success: false, error: 'Auth not initialized' })
+    } as AuthContextType;
   }
   return context;
 }

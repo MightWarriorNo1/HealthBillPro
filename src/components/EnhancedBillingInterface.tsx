@@ -26,6 +26,7 @@ function EnhancedBillingInterface({
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [viewMode, setViewMode] = useState<'single' | 'split'>('single');
   const [activePanel, setActivePanel] = useState<'billing' | 'patients' | 'todo' | 'ar' | 'monthly-ar'>('todo');
+  const [highlightColor, setHighlightColor] = useState<string | null>(null);
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -51,6 +52,25 @@ function EnhancedBillingInterface({
       window.removeEventListener('billing:select-year', handler as EventListener);
     };
   }, []);
+
+  // Load persisted highlight color on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('billing.highlightColor');
+      if (saved) setHighlightColor(saved);
+    } catch {}
+  }, []);
+
+  // Persist highlight color when changed
+  useEffect(() => {
+    try {
+      if (highlightColor) {
+        localStorage.setItem('billing.highlightColor', highlightColor);
+      } else {
+        localStorage.removeItem('billing.highlightColor');
+      }
+    } catch {}
+  }, [highlightColor]);
 
   const getMonthColor = (monthIndex: number) => {
     const colors = [
@@ -83,6 +103,15 @@ function EnhancedBillingInterface({
               {viewMode === 'single' ? <Eye size={14} /> : <EyeOff size={14} />}
               <span>{viewMode === 'single' ? 'Split View' : 'Single View'}</span>
             </button>
+            <label className="flex items-center space-x-2 px-2 py-1 rounded-lg bg-gray-50 border text-xs text-gray-700" title="Change month highlight color">
+              <span>Highlight</span>
+              <input
+                type="color"
+                value={highlightColor || '#7C3AED'}
+                onChange={(e) => setHighlightColor(e.target.value)}
+                className="w-6 h-6 p-0 border-0 bg-transparent cursor-pointer"
+              />
+            </label>
           </div>
         </div>
         {/* Month pills header */}
@@ -97,8 +126,8 @@ function EnhancedBillingInterface({
                 onClick={() => setSelectedMonth(monthIndex)}
                 className={`px-3 py-1 rounded-full text-xs font-medium border ${isActive ? 'text-white' : 'text-gray-800'}`}
                 style={{
-                  backgroundColor: isActive ? color : '#ffffff',
-                  borderColor: color,
+                  backgroundColor: isActive ? (highlightColor || color) : '#ffffff',
+                  borderColor: isActive && highlightColor ? highlightColor : color,
                 }}
                 title={`${name} ${selectedYear}`}
               >
