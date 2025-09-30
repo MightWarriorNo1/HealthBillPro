@@ -17,6 +17,7 @@ interface EnhancedBillingInterfaceProps {
   hideAccountsReceivable?: boolean;
   // Optional: lock specific columns from editing; users can still highlight
   lockedColumns?: string[];
+  isSuperAdmin?: boolean;
 }
 
 function EnhancedBillingInterface({ 
@@ -24,7 +25,8 @@ function EnhancedBillingInterface({
   clinicId, 
   canEdit = true, 
   hideAccountsReceivable = false,
-  lockedColumns
+  lockedColumns,
+  isSuperAdmin = false
 }: EnhancedBillingInterfaceProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -232,6 +234,8 @@ function EnhancedBillingInterface({
         highlightOnly={!canEdit}
         lockedColumns={lockedColumns && lockedColumns.length > 0 ? lockedColumns : (!canEdit ? ALL_BILLING_COLUMNS : [])}
         dateRange={computeSelectedMonthDateRange(selectedYear, selectedMonth)}
+        highlightColor={highlightColor || undefined}
+        isSuperAdmin={isSuperAdmin}
       />
     </div>
   );

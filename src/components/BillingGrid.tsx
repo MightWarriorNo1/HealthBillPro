@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { DollarSign, ChevronDown } from 'lucide-react';
+import { DollarSign, ChevronDown, Lock, Unlock } from 'lucide-react';
 import {
   createColumnHelper,
   flexRender,
@@ -102,6 +102,8 @@ interface BillingGridProps {
   dateRange?: { start: string; end: string };
   highlightOnly?: boolean;
   lockedColumns?: string[];
+  highlightColor?: string;
+  isSuperAdmin?: boolean;
 }
 
 type Entry = {
@@ -140,7 +142,7 @@ type Entry = {
 
 const NUMBER_COLS = new Set(['amount', 'insurance_payment', 'payment_amount', 'copay', 'coinsurance', 'ar_amount']);
 
-export default function BillingGrid({ clinicId, providerId, readOnly, visibleColumns, dateRange, highlightOnly, lockedColumns }: BillingGridProps) {
+export default function BillingGrid({ clinicId, providerId, readOnly, visibleColumns, dateRange, highlightOnly, lockedColumns, highlightColor, isSuperAdmin = false }: BillingGridProps) {
   const [rowData, setRowData] = useState<Entry[]>([]);
   const [, setLoading] = useState(false);
   const [billingCodes, setBillingCodes] = useState<string[]>([]);
@@ -149,6 +151,31 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [bulkDate, setBulkDate] = useState<string>('');
+  const [internalLockedColumns, setInternalLockedColumns] = useState<Set<string>>(new Set(lockedColumns || []));
+  
+  // Load locked columns from database on mount
+  useEffect(() => {
+    const loadLockedColumns = async () => {
+      try {
+        if (clinicId) {
+          const { data, error } = await supabase
+            .from('clinic_settings')
+            .select('setting_value')
+            .eq('clinic_id', clinicId)
+            .eq('setting_key', 'locked_columns')
+            .single();
+          
+          if (!error && data?.setting_value) {
+            setInternalLockedColumns(new Set(data.setting_value));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load locked columns:', error);
+      }
+    };
+    
+    loadLockedColumns();
+  }, [clinicId]);
   
   // TanStack Table states
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -160,11 +187,99 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   
   const columnHelper = createColumnHelper<Entry>();
   const isColumnLocked = (columnId: string): boolean => {
-    if (!lockedColumns || lockedColumns.length === 0) return false;
-    return lockedColumns.includes(columnId);
+    return internalLockedColumns.has(columnId);
+  };
+
+  const toggleColumnLock = async (columnId: string) => {
+    if (!isSuperAdmin) return; // Only super admin can toggle locks
+    
+    const newSet = new Set(internalLockedColumns);
+    if (newSet.has(columnId)) {
+      newSet.delete(columnId);
+    } else {
+      newSet.add(columnId);
+    }
+    
+    setInternalLockedColumns(newSet);
+    
+    // Save to database for persistence across sessions
+    try {
+      const columnsArray = Array.from(newSet);
+      await supabase
+        .from('clinic_settings')
+        .upsert({
+          clinic_id: clinicId,
+          setting_key: 'locked_columns',
+          setting_value: columnsArray,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'clinic_id,setting_key'
+        });
+    } catch (error) {
+      console.error('Failed to save locked columns to database:', error);
+    }
   };
   const canEditCell = (columnId: string): boolean => {
+    // Super admin can edit all columns, even locked ones
+    if (isSuperAdmin) {
+      return !readOnly && !highlightOnly;
+    }
+    // Regular users cannot edit locked columns
     return !readOnly && !highlightOnly && !isColumnLocked(columnId);
+  };
+
+  const getCellStyle = (columnId: string): React.CSSProperties => {
+    if (isColumnLocked(columnId) && !isSuperAdmin) {
+      return {
+        backgroundColor: '#f3f4f6', // gray-100
+        color: '#6b7280', // gray-500
+        cursor: 'not-allowed'
+      };
+    }
+    return {};
+  };
+
+  const getHeaderCellStyle = (columnId: string): React.CSSProperties => {
+    // If column is locked, show gray header for ALL users
+    if (isColumnLocked(columnId)) {
+      return {
+        backgroundColor: '#9ca3af', // gray-400
+        color: '#ffffff'
+      };
+    }
+    
+    // Original colors for unlocked columns
+    const styles: Record<string, { bg: string; fg: string }> = {
+      // Medium purple (#9966CC) - columns 1-7, 15-17, 19
+      id: { bg: '#9966CC', fg: '#FFFFFF' },
+      patient_name: { bg: '#9966CC', fg: '#FFFFFF' },
+      last_initial: { bg: '#9966CC', fg: '#FFFFFF' },
+      insurance: { bg: '#9966CC', fg: '#FFFFFF' },
+      copay: { bg: '#9966CC', fg: '#FFFFFF' },
+      coinsurance: { bg: '#9966CC', fg: '#FFFFFF' },
+      date: { bg: '#9966CC', fg: '#FFFFFF' },
+      payment_amount: { bg: '#9966CC', fg: '#FFFFFF' },
+      payment_status: { bg: '#9966CC', fg: '#FFFFFF' },
+      claim_number: { bg: '#9966CC', fg: '#FFFFFF' },
+      notes: { bg: '#9966CC', fg: '#FFFFFF' },
+      // Orange (#FF9933) - columns 8-9
+      procedure_code: { bg: '#FF9933', fg: '#FFFFFF' },
+      appointment_status: { bg: '#FF9933', fg: '#FFFFFF' },
+      // Dark green (#336600) - columns 10-11, 18
+      status: { bg: '#336600', fg: '#FFFFFF' },
+      submit_info: { bg: '#336600', fg: '#FFFFFF' },
+      amount: { bg: '#336600', fg: '#FFFFFF' },
+      // Light green (#99CC66) - columns 12-14
+      insurance_payment: { bg: '#99CC66', fg: '#000000' },
+      insurance_notes: { bg: '#99CC66', fg: '#000000' },
+      description: { bg: '#99CC66', fg: '#000000' },
+    };
+    const s = styles[columnId];
+    if (!s) return {};
+    return {
+      backgroundColor: s.bg,
+      color: s.fg,
+    } as React.CSSProperties;
   };
 
   // Allow native browser Find (Ctrl/Cmd+F) to work by exiting edit mode
@@ -355,7 +470,8 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
   const updateCellValue = async (rowId: string, columnId: string, value: any) => {
     if (String(rowId).startsWith('placeholder-')) return;
     if (highlightOnly) return;
-    if (isColumnLocked(columnId)) return;
+    // Only prevent saving locked columns for non-super admin users
+    if (isColumnLocked(columnId) && !isSuperAdmin) return;
     
     const field = columnId;
     let processedValue = NUMBER_COLS.has(field) ? Number(value || 0) : value;
@@ -427,7 +543,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {value}
             </div>
           );
@@ -457,7 +577,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {value}
             </div>
           );
@@ -487,7 +611,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {value}
             </div>
           );
@@ -517,7 +645,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {value}
             </div>
           );
@@ -548,7 +680,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 text-right" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -579,7 +715,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 text-right" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -618,7 +758,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {formattedValue}
             </div>
           );
@@ -653,7 +797,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               : value || '';
               
           return (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 cursor-pointer relative" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {displayValue}
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -690,7 +838,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 cursor-pointer relative" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               <span style={{ color: getOptionColor('appointment_status', value) }}>{value}</span>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -728,7 +880,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-200 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 cursor-pointer relative" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               <div className="px-2 py-1 rounded text-center" style={getOptionBgStyle('status', value)}>{value || ''}</div>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
             </div>
@@ -760,7 +916,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {value || ''}
             </div>
           );
@@ -791,7 +951,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 text-right" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -827,7 +991,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 cursor-pointer relative" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               <span style={{ color: getOptionColor('insurance_notes', value) }}>{value}</span>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -859,7 +1027,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 text-right" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -890,7 +1062,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 text-right" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -927,7 +1103,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-200 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 cursor-pointer relative" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               <div className="px-2 py-1 rounded text-center" style={getOptionBgStyle('payment_status', value)}>{value || ''}</div>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300" />
             </div>
@@ -964,7 +1144,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             </div>
           ) : (
-            <div className="px-2 py-1 cursor-pointer relative" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 cursor-pointer relative" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               <span style={{ color: getOptionColor('claim_number', value) }}>{value}</span>
               <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             </div>
@@ -996,7 +1180,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1 text-right" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1 text-right" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {(value && typeof value === 'number') ? value.toFixed(2) : '0.00'}
             </div>
           );
@@ -1026,7 +1214,11 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
               autoFocus
             />
           ) : (
-            <div className="px-2 py-1" onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}>
+            <div 
+              className="px-2 py-1" 
+              style={getCellStyle(id)}
+              onClick={() => canEditCell(id) && setEditingCell({ rowId: row.original.id, columnId: id })}
+            >
               {value}
             </div>
           );
@@ -1096,43 +1288,6 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
     },
   });
 
-  // Header color styles to match the provided image
-  const getHeaderCellStyle = (columnId: string): React.CSSProperties => {
-    // Choose background/text colors per column id
-    const styles: Record<string, { bg: string; fg: string }> = {
-      // Purple group
-      id: { bg: '#6B5B95', fg: '#FFFFFF' },
-      patient_name: { bg: '#6B5B95', fg: '#FFFFFF' },
-      last_initial: { bg: '#6B5B95', fg: '#FFFFFF' },
-      insurance: { bg: '#6B5B95', fg: '#FFFFFF' },
-      copay: { bg: '#6B5B95', fg: '#FFFFFF' },
-      coinsurance: { bg: '#6B5B95', fg: '#FFFFFF' },
-      date: { bg: '#6B5B95', fg: '#FFFFFF' },
-      // Orange group
-      procedure_code: { bg: '#D97706', fg: '#FFFFFF' },
-      appointment_status: { bg: '#D97706', fg: '#FFFFFF' },
-      // Dark/green group
-      status: { bg: '#065F46', fg: '#FFFFFF' },
-      submit_info: { bg: '#064E3B', fg: '#FFFFFF' },
-      insurance_payment: { bg: '#10B981', fg: '#0B2416' },
-      insurance_notes: { bg: '#86EFAC', fg: '#052e1e' },
-      description: { bg: '#A7F3D0', fg: '#052e1e' },
-      // Lavender/purple group for PT
-      payment_amount: { bg: '#C4B5FD', fg: '#1F1147' },
-      payment_status: { bg: '#DDD6FE', fg: '#1F1147' },
-      // Green for totals and AR ref date
-      claim_number: { bg: '#86EFAC', fg: '#052e1e' },
-      amount: { bg: '#22C55E', fg: '#052e1e' },
-      // Purple for notes
-      notes: { bg: '#6B5B95', fg: '#FFFFFF' },
-    };
-    const s = styles[columnId];
-    if (!s) return {};
-    return {
-      backgroundColor: s.bg,
-      color: s.fg,
-    } as React.CSSProperties;
-  };
 
   // Paste functionality simplified for TanStack Table
   const copySelection = () => {
@@ -1291,6 +1446,64 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
             </>
           )}
           <button className="px-3 py-2 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200" onClick={toggleHighlightSelected}>Highlight</button>
+          {isSuperAdmin && (
+            <>
+              <div className="mx-2 h-6 w-px bg-gray-300" />
+              <button 
+                className="px-3 py-2 bg-blue-100 text-blue-800 rounded hover:bg-blue-200 flex items-center gap-1" 
+                onClick={async () => {
+                  const allColumns = table.getAllLeafColumns().map(col => col.id);
+                  setInternalLockedColumns(new Set(allColumns));
+                  
+                  // Save to database
+                  try {
+                    await supabase
+                      .from('clinic_settings')
+                      .upsert({
+                        clinic_id: clinicId,
+                        setting_key: 'locked_columns',
+                        setting_value: allColumns,
+                        updated_at: new Date().toISOString()
+                      }, {
+                        onConflict: 'clinic_id,setting_key'
+                      });
+                  } catch (error) {
+                    console.error('Failed to save locked columns to database:', error);
+                  }
+                }}
+                title="Lock all columns"
+              >
+                <Lock size={14} />
+                Lock All
+              </button>
+              <button 
+                className="px-3 py-2 bg-green-100 text-green-800 rounded hover:bg-green-200 flex items-center gap-1" 
+                onClick={async () => {
+                  setInternalLockedColumns(new Set());
+                  
+                  // Save to database
+                  try {
+                    await supabase
+                      .from('clinic_settings')
+                      .upsert({
+                        clinic_id: clinicId,
+                        setting_key: 'locked_columns',
+                        setting_value: [],
+                        updated_at: new Date().toISOString()
+                      }, {
+                        onConflict: 'clinic_id,setting_key'
+                      });
+                  } catch (error) {
+                    console.error('Failed to save locked columns to database:', error);
+                  }
+                }}
+                title="Unlock all columns"
+              >
+                <Unlock size={14} />
+                Unlock All
+              </button>
+            </>
+          )}
           <button className="px-3 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200" onClick={copySelection}>Copy</button>
           <span className="text-xs text-gray-500">Paste with Ctrl+V</span>
 
@@ -1347,16 +1560,34 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
                     className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 relative"
                     style={{ ...getHeaderCellStyle(header.column.id), width: header.getSize() }}
                   >
-                    <div
-                      className={header.column.getCanSort() ? 'cursor-pointer select-none hover:bg-gray-100' : ''}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getCanSort() && (
-                        <span className="ml-1">
-                          {header.column.getIsSorted() === 'asc' ? '↑' :
-                            header.column.getIsSorted() === 'desc' ? '↓' : '↕'}
-                        </span>
+                    <div className="flex items-center justify-between">
+                      <div
+                        className={`flex-1 ${header.column.getCanSort() ? 'cursor-pointer select-none hover:bg-gray-100' : ''}`}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                        {header.column.getCanSort() && (
+                          <span className="ml-1">
+                            {header.column.getIsSorted() === 'asc' ? '↑' :
+                              header.column.getIsSorted() === 'desc' ? '↓' : '↕'}
+                          </span>
+                        )}
+                      </div>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleColumnLock(header.column.id);
+                          }}
+                          className="ml-2 p-1 rounded hover:bg-gray-200 text-white hover:text-gray-800"
+                          title={isColumnLocked(header.column.id) ? 'Unlock column' : 'Lock column'}
+                        >
+                          {isColumnLocked(header.column.id) ? (
+                            <Lock size={14} />
+                          ) : (
+                            <Unlock size={14} />
+                          )}
+                        </button>
                       )}
                     </div>
                     {header.column.getCanResize() && (
@@ -1380,9 +1611,14 @@ export default function BillingGrid({ clinicId, providerId, readOnly, visibleCol
                   selectedRowIds.has(row.original.id)
                     ? 'bg-blue-50'
                     : highlightedRowIds.has(row.original.id)
-                    ? 'bg-yellow-50'
+                    ? ''
                     : ''
                 }`}
+                style={{
+                  backgroundColor: highlightedRowIds.has(row.original.id) 
+                    ? (highlightColor ? `${highlightColor}20` : '#FEF3C7') 
+                    : undefined
+                }}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td

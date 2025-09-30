@@ -1312,7 +1312,7 @@ function SuperAdminDashboard() {
                   providerId={providerId}
                   clinicId={provider.clinicId}
                   canEdit={true}
-                  userRole="super_admin"
+                  isSuperAdmin={true}
                   hideAccountsReceivable={true}
                 />
               </div>

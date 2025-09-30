@@ -34,7 +34,7 @@ function OfficeStaffDashboard() {
                 <EnhancedBillingInterface
                   clinicId={user?.clinicId}
                   canEdit={true}
-                  userRole={user?.role}
+                  isSuperAdmin={user?.role === 'super_admin'}
                   visibleColumns={['A', 'B', 'C', 'D', 'E', 'F', 'G', 'O', 'P', 'Q', 'R', 'S', 'T']}
                 />
               </div>

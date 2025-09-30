@@ -66,6 +66,8 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editingCode, setEditingCode] = useState<BillingCode | null>(null);
   const [editingClinic, setEditingClinic] = useState<ClinicRecord | null>(null);
+  const [columnPermissions, setColumnPermissions] = useState<Record<string, boolean>>({});
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
 
   const [newUser, setNewUser] = useState({
     email: '',
@@ -113,7 +115,94 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
 
   useEffect(() => {
     loadData();
+    if (activeTab === 'system-settings') {
+      loadColumnPermissions();
+    }
   }, [activeTab]);
+
+  const loadColumnPermissions = async () => {
+    setLoadingPermissions(true);
+    try {
+      const { data, error } = await supabase
+        .from('column_permissions')
+        .select('column_id, is_locked')
+        .eq('setting_type', 'billing_grid');
+      
+      if (error) throw error;
+      
+      const permissions: Record<string, boolean> = {};
+      (data || []).forEach((row: any) => {
+        permissions[row.column_id] = row.is_locked;
+      });
+      
+      setColumnPermissions(permissions);
+    } catch (error) {
+      console.error('Error loading column permissions:', error);
+      // Initialize with default permissions (all unlocked)
+      const defaultPermissions: Record<string, boolean> = {};
+      const allColumns = [
+        'id', 'patient_name', 'last_initial', 'insurance', 'copay', 'coinsurance', 'date',
+        'procedure_code', 'appointment_status', 'status', 'submit_info', 'insurance_payment',
+        'insurance_notes', 'description', 'payment_amount', 'payment_status', 'claim_number',
+        'amount', 'notes'
+      ];
+      allColumns.forEach(col => {
+        defaultPermissions[col] = false;
+      });
+      setColumnPermissions(defaultPermissions);
+    } finally {
+      setLoadingPermissions(false);
+    }
+  };
+
+  const saveColumnPermissions = async () => {
+    setLoadingPermissions(true);
+    try {
+      // Delete existing permissions
+      await supabase
+        .from('column_permissions')
+        .delete()
+        .eq('setting_type', 'billing_grid');
+      
+      // Insert new permissions
+      const permissionsToSave = Object.entries(columnPermissions).map(([columnId, isLocked]) => ({
+        column_id: columnId,
+        is_locked: isLocked,
+        setting_type: 'billing_grid',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+      
+      if (permissionsToSave.length > 0) {
+        const { error } = await supabase
+          .from('column_permissions')
+          .insert(permissionsToSave);
+        
+        if (error) throw error;
+      }
+      
+      alert('Column permissions saved successfully!');
+    } catch (error) {
+      console.error('Error saving column permissions:', error);
+      alert('Error saving column permissions. Please try again.');
+    } finally {
+      setLoadingPermissions(false);
+    }
+  };
+
+  const resetColumnPermissions = () => {
+    const defaultPermissions: Record<string, boolean> = {};
+    const allColumns = [
+      'id', 'patient_name', 'last_initial', 'insurance', 'copay', 'coinsurance', 'date',
+      'procedure_code', 'appointment_status', 'status', 'submit_info', 'insurance_payment',
+      'insurance_notes', 'description', 'payment_amount', 'payment_status', 'claim_number',
+      'amount', 'notes'
+    ];
+    allColumns.forEach(col => {
+      defaultPermissions[col] = false;
+    });
+    setColumnPermissions(defaultPermissions);
+  };
 
   // Keep internal tab in sync with provided initialTab (when parent changes)
   useEffect(() => {
@@ -755,6 +844,64 @@ function SuperAdminSettings({ userId, initialTab }: SuperAdminSettingsProps) {
                     defaultValue="30"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-4">Column Permissions</h4>
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 mb-4">
+                  Configure which columns are locked for non-super admin users. Locked columns will appear grayed out and non-editable for regular users.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    { id: 'id', label: 'ID', category: 'Admin' },
+                    { id: 'patient_name', label: 'First Name', category: 'Admin' },
+                    { id: 'last_initial', label: 'Last Initial', category: 'Admin' },
+                    { id: 'insurance', label: 'Insurance', category: 'Admin' },
+                    { id: 'copay', label: 'Co-pay', category: 'Admin' },
+                    { id: 'coinsurance', label: 'Co-ins', category: 'Admin' },
+                    { id: 'date', label: 'Date of Service', category: 'Admin' },
+                    { id: 'procedure_code', label: 'CPT Code', category: 'Provider' },
+                    { id: 'appointment_status', label: 'Appt Status', category: 'Provider' },
+                    { id: 'status', label: 'Claim Status', category: 'Billing' },
+                    { id: 'submit_info', label: 'Most Recent Submit Date', category: 'Billing' },
+                    { id: 'insurance_payment', label: 'Ins Pay', category: 'Billing' },
+                    { id: 'insurance_notes', label: 'Ins Pay Date', category: 'Billing' },
+                    { id: 'description', label: 'PT RES', category: 'Billing' },
+                    { id: 'payment_amount', label: 'Collected from PT', category: 'Patient' },
+                    { id: 'payment_status', label: 'PT Pay Status', category: 'Patient' },
+                    { id: 'claim_number', label: 'PT Payment AR Ref Date', category: 'Patient' },
+                    { id: 'amount', label: 'Total Pay', category: 'Patient' },
+                    { id: 'notes', label: 'Notes', category: 'Admin' }
+                  ].map((column) => (
+                    <div key={column.id} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id={`lock-${column.id}`}
+                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        onChange={(e) => {
+                          // TODO: Implement column locking logic
+                          console.log(`Column ${column.id} ${e.target.checked ? 'locked' : 'unlocked'}`);
+                        }}
+                      />
+                      <div className="flex-1">
+                        <label htmlFor={`lock-${column.id}`} className="text-sm font-medium text-gray-900 cursor-pointer">
+                          {column.label}
+                        </label>
+                        <div className="text-xs text-gray-500">{column.category}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                  <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+                    Reset to Default
+                  </button>
+                  <button className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700">
+                    Save Column Permissions
+                  </button>
                 </div>
               </div>
             </div>
